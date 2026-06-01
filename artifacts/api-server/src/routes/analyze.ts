@@ -34,8 +34,16 @@ router.post("/analyze", async (req, res): Promise<void> => {
   const isSingleDay = uniqueDays === 1;
 
   const consistencySection = isSingleDay
-    ? `NOTE: All sessions are from the same day. Do NOT evaluate weekly consistency or penalize for low active-day count. Focus entirely on session quality, focus/retention patterns, and subject performance.`
-    : `- Active study days: ${uniqueDays}/7 — evaluate consistency across the week.`;
+    ? `SINGLE-DAY MODE — STRICT RULES:
+- All sessions are from the same day. This is a single-day performance snapshot, not a weekly review.
+- Do NOT evaluate consistency, active days, or study frequency.
+- Do NOT assign status based on weekly behavior or session count.
+- Do NOT mention or imply that studying only one day is a problem.
+- Focus ONLY on: session quality, focus scores, retention scores, difficulty vs. performance, and subject-wise patterns.
+- Status (LOCKED_IN / INCONSISTENT / STRUGGLING / COASTING) must reflect the quality of today's sessions — not how often the student studies.`
+    : `MULTI-DAY MODE:
+- Active study days: ${uniqueDays}/7 — evaluate consistency across the week.
+- Status should reflect both session quality and study frequency.`;
 
   const prompt = `You are a strict but respectful AI study performance analyst.
 
