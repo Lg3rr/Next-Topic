@@ -5,9 +5,36 @@ const router: IRouter = Router();
 
 const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
 
+function getApiKeys(): string[] {
+  const keys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY_4,
+  ].filter((k): k is string => typeof k === "string" && k.trim().length > 0);
+  return keys;
+}
+
 function isOverloaded(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return msg.includes("503") || msg.includes("high demand") || msg.includes("overloaded") || msg.includes("Service Unavailable");
+  return (
+    msg.includes("503") ||
+    msg.includes("high demand") ||
+    msg.includes("overloaded") ||
+    msg.includes("Service Unavailable")
+  );
+}
+
+function isQuotaError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("429") ||
+    msg.includes("quota") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("rate limit") ||
+    msg.includes("out of tokens") ||
+    msg.includes("billing")
+  );
 }
 
 router.post("/analyze", async (req, res): Promise<void> => {
@@ -19,14 +46,16 @@ router.post("/analyze", async (req, res): Promise<void> => {
       return;
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
+    const apiKeys = getApiKeys();
+    if (apiKeys.length === 0) {
+      res.status(500).json({ error: "No Gemini API key configured" });
       return;
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-    type Session = { date: string; subject: string; duration: number; difficulty: number; focus: number; retention: number; notes: string };
+    type Session = {
+      date: string; subject: string; duration: number;
+      difficulty: number; focus: number; retention: number; notes: string;
+    };
 
     const uniqueDays = new Set((sessions as Session[]).map((s) => s.date)).size;
     const totalMinutes = (sessions as Session[]).reduce((sum, s) => sum + s.duration, 0);
@@ -110,31 +139,36 @@ ${sessionSummary}`;
 
     let raw = "";
 
-    for (const modelName of FALLBACK_MODELS) {
-      let succeeded = false;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          req.log.info({ model: modelName, attempt }, "Calling Gemini");
-          const model = genAI.getGenerativeModel({ model: modelName });
-          const result = await model.generateContent(prompt);
-          raw = result.response.text();
-          succeeded = true;
-          break;
-        } catch (err: unknown) {
-          if (isOverloaded(err)) {
-            req.log.warn({ model: modelName, attempt }, "Gemini overloaded, will retry or fallback");
-            if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
-          } else {
-            throw err;
+    outer: for (const [keyIndex, apiKey] of apiKeys.entries()) {
+      const genAI = new GoogleGenerativeAI(apiKey);
+
+      for (const modelName of FALLBACK_MODELS) {
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            req.log.info({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Calling Gemini");
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(prompt);
+            raw = result.response.text();
+            break outer;
+          } catch (err: unknown) {
+            if (isQuotaError(err)) {
+              req.log.warn({ keyIndex: keyIndex + 1, model: modelName }, "Quota exhausted, trying next key");
+              break; // skip remaining models for this key, try next key
+            } else if (isOverloaded(err)) {
+              req.log.warn({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Overloaded, retrying or falling back");
+              if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
+            } else {
+              throw err;
+            }
           }
         }
       }
-      if (succeeded) break;
-      req.log.warn({ model: modelName }, "Model exhausted, trying next fallback");
     }
 
     if (!raw) {
-      res.status(503).json({ error: "Gemini is currently overloaded. Please try again in a moment." });
+      res.status(503).json({
+        error: `All API keys are currently exhausted or unavailable. Please try again later or add more API keys.`,
+      });
       return;
     }
 
