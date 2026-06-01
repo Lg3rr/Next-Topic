@@ -1,11 +1,7 @@
 import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router: IRouter = Router();
-
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
 
 router.post("/analyze", async (req, res): Promise<void> => {
   const { sessions } = req.body;
@@ -15,10 +11,13 @@ router.post("/analyze", async (req, res): Promise<void> => {
     return;
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    res.status(500).json({ error: "ANTHROPIC_API_KEY is not configured" });
+  if (!process.env.GEMINI_API_KEY) {
+    res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
     return;
   }
+
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const sessionSummary = sessions
     .map(
@@ -32,7 +31,7 @@ router.post("/analyze", async (req, res): Promise<void> => {
 Study sessions:
 ${sessionSummary}
 
-Return ONLY a valid JSON object with exactly these fields:
+Return ONLY a valid JSON object (no markdown, no code fences) with exactly these fields:
 {
   "status": one of "LOCKED_IN" | "INCONSISTENT" | "STRUGGLING" | "COASTING",
   "status_reason": short one-line explanation of the status,
@@ -47,17 +46,12 @@ Return ONLY a valid JSON object with exactly these fields:
 
 Be specific and data-driven. Reference actual numbers from the sessions. Do not be generic.`;
 
-  const message = await client.messages.create({
-    model: "claude-opus-4-5",
-    max_tokens: 1024,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const raw = message.content[0].type === "text" ? message.content[0].text : "";
+  const result = await model.generateContent(prompt);
+  const raw = result.response.text();
 
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    req.log.error({ raw }, "Failed to extract JSON from Anthropic response");
+    req.log.error({ raw }, "Failed to extract JSON from Gemini response");
     res.status(500).json({ error: "Failed to parse analysis response" });
     return;
   }
