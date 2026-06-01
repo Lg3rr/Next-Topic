@@ -11,13 +11,13 @@ export interface Session {
 
 export interface AnalysisResult {
   status: "LOCKED_IN" | "INCONSISTENT" | "STRUGGLING" | "COASTING";
-  status_reason: string;
   level: number;
+  status_reason: string;
   one_liner: string;
-  fake_study_warning: boolean;
-  fake_study_reason: string;
+  patterns: string[];
   callouts: string[];
   weak_subjects: string[];
+  improvement_points: string[];
   tomorrow_plan: {
     subject: string;
     duration_minutes: number;

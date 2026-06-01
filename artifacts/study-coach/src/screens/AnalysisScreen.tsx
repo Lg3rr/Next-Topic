@@ -50,6 +50,7 @@ export default function AnalysisScreen() {
       {analysis && !loading && (
         <div style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 14 }}>
 
+          {/* Status + Level */}
           <div style={{ ...card, borderColor: color + "33", background: color + "0a" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
@@ -67,28 +68,44 @@ export default function AnalysisScreen() {
             </div>
           </div>
 
+          {/* One-liner */}
           <div style={{ ...card, borderColor: "rgba(255,75,75,0.15)" }}>
             <div style={{ fontSize: 11, color: "#ff6b80", fontStyle: "italic", lineHeight: 1.6 }}>
               "{analysis.one_liner}"
             </div>
           </div>
 
-          {analysis.fake_study_warning && (
-            <div style={{ ...card, borderColor: "rgba(255,184,0,0.25)" }}>
-              <div style={{ fontSize: 9, letterSpacing: 2, color: "#ffb800", marginBottom: 6 }}>
-                FAKE STUDY DETECTED
-              </div>
-              <div style={{ fontSize: 12, color: "#ffb80099" }}>{analysis.fake_study_reason}</div>
+          {/* Patterns */}
+          {analysis.patterns?.length > 0 && (
+            <div style={card}>
+              <Section label="PATTERNS DETECTED" />
+              {analysis.patterns.map((p, i) => (
+                <Row key={i} icon="◈" iconColor="#00b4d8" text={p} textColor="#7ecfe0" />
+              ))}
             </div>
           )}
 
-          <div style={card}>
-            <Section label="CALLOUTS" />
-            {analysis.callouts.map((c, i) => (
-              <Row key={i} icon="✗" iconColor="#ff4d6d" text={c} textColor="#cc8888" />
-            ))}
-          </div>
+          {/* Callouts */}
+          {analysis.callouts?.length > 0 && (
+            <div style={card}>
+              <Section label="CALLOUTS" />
+              {analysis.callouts.map((c, i) => (
+                <Row key={i} icon="✗" iconColor="#ff4d6d" text={c} textColor="#cc8888" />
+              ))}
+            </div>
+          )}
 
+          {/* Improvement points */}
+          {analysis.improvement_points?.length > 0 && (
+            <div style={card}>
+              <Section label="HOW TO IMPROVE" />
+              {analysis.improvement_points.map((p, i) => (
+                <Row key={i} icon="→" iconColor="#00ff87" text={p} textColor="#888" />
+              ))}
+            </div>
+          )}
+
+          {/* Weak subjects */}
           {analysis.weak_subjects?.length > 0 && (
             <div style={card}>
               <Section label="WEAK SUBJECTS" />
@@ -100,23 +117,26 @@ export default function AnalysisScreen() {
             </div>
           )}
 
-          <div style={card}>
-            <Section label="TOMORROW'S PLAN" />
-            {analysis.tomorrow_plan.map((t, i) => (
-              <div key={i} style={planItem}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ color: "#fff", fontSize: 13, fontWeight: "bold" }}>{t.subject}</span>
-                  <span style={{ color: "#00ff87", fontSize: 16, fontWeight: "bold" }}>
-                    {t.duration_minutes}min
-                  </span>
+          {/* Tomorrow's plan */}
+          {analysis.tomorrow_plan?.length > 0 && (
+            <div style={card}>
+              <Section label="TOMORROW'S PLAN" />
+              {analysis.tomorrow_plan.map((t, i) => (
+                <div key={i} style={planItem}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ color: "#fff", fontSize: 13, fontWeight: "bold" }}>{t.subject}</span>
+                    <span style={{ color: "#00ff87", fontSize: 16, fontWeight: "bold" }}>
+                      {t.duration_minutes}min
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10, color: priorityColor(t.priority), marginBottom: 4, letterSpacing: 1 }}>
+                    {t.priority}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#666" }}>{t.focus_tip}</div>
                 </div>
-                <div style={{ fontSize: 10, color: priorityColor(t.priority), marginBottom: 4, letterSpacing: 1 }}>
-                  {t.priority}
-                </div>
-                <div style={{ fontSize: 11, color: "#666" }}>{t.focus_tip}</div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
         </div>
       )}
