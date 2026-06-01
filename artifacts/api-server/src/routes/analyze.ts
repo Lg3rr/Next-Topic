@@ -31,9 +31,15 @@ router.post("/analyze", async (req, res): Promise<void> => {
     )
     .join("\n");
 
+  const isSingleDay = uniqueDays === 1;
+
+  const consistencySection = isSingleDay
+    ? `NOTE: All sessions are from the same day. Do NOT evaluate weekly consistency or penalize for low active-day count. Focus entirely on session quality, focus/retention patterns, and subject performance.`
+    : `- Active study days: ${uniqueDays}/7 — evaluate consistency across the week.`;
+
   const prompt = `You are a strict but respectful AI study performance analyst.
 
-Your job is to analyze a student's last 7 days of study sessions and return a structured JSON report with honest feedback and an actionable plan.
+Your job is to analyze a student's study sessions and return a structured JSON report with honest feedback and an actionable plan.
 
 ---
 
@@ -52,6 +58,10 @@ Instead of labeling "fake studying", detect and describe:
 - "low focus + low retention pattern"
 - "passive study behavior"
 - "inefficient time-to-learning ratio"
+
+---
+
+${consistencySection}
 
 ---
 
@@ -79,13 +89,26 @@ OUTPUT FORMAT (strict JSON only, no markdown, no code fences):
 ---
 
 DATA:
-- Active study days: ${uniqueDays}/7
 - Total study time: ${totalMinutes} minutes
 - Sessions:
 ${sessionSummary}`;
 
-  const result = await model.generateContent(prompt);
-  const raw = result.response.text();
+  let raw = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const result = await model.generateContent(prompt);
+      raw = result.response.text();
+      break;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt < 3 && (msg.includes("503") || msg.includes("high demand") || msg.includes("overloaded"))) {
+        req.log.warn({ attempt }, "Gemini temporarily unavailable, retrying...");
+        await new Promise((r) => setTimeout(r, attempt * 1500));
+      } else {
+        throw err;
+      }
+    }
+  }
 
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
