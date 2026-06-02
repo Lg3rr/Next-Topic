@@ -105,6 +105,11 @@ Don't label behavior harshly. Instead describe it plainly:
 - Passive study = "reading without testing yourself"
 - Inefficient time = "spent X minutes but retained very little"
 
+CONFIDENCE & CONSISTENCY RULES:
+- Be confident in your analysis even if the data has minor inconsistencies. Don't hedge or second-guess — give a clear verdict.
+- Focus on behavioral patterns across sessions, not just subject labels.
+- If a session's notes clearly don't match the subject (e.g. chemistry notes logged under Math), mention it briefly in one sentence — don't dwell on it. Example: "One Math session looks like it might have been a Chemistry revision — minor logging inconsistency, doesn't change the overall picture."
+
 ---
 
 ${consistencySection}
