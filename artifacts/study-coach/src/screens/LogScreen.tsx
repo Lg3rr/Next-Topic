@@ -1,7 +1,47 @@
 import { useState } from "react";
-import { addSession } from "../storage";
+import { addSession, getSessions } from "../storage";
 
-const SUBJECTS = ["Math", "Physics", "Chemistry", "Biology", "History", "Literature", "Programming", "English", "Economics", "Other"];
+const SUBJECT_GROUPS: { group: string; subjects: string[] }[] = [
+  {
+    group: "Science",
+    subjects: ["Physics", "Chemistry", "Biology", "Math"],
+  },
+  {
+    group: "Commerce",
+    subjects: ["Accountancy", "Business Studies", "Economics", "Entrepreneurship", "Finance", "Marketing", "Banking", "Taxation"],
+  },
+  {
+    group: "Arts / Humanities",
+    subjects: ["History", "Political Science", "Geography", "Sociology", "Psychology", "Philosophy", "Literature", "Fine Arts", "Music"],
+  },
+  {
+    group: "Tech / Skills",
+    subjects: ["Programming", "Computer Science", "AI / Machine Learning", "Web Development", "Data Science", "Graphic Design"],
+  },
+  {
+    group: "Languages",
+    subjects: ["English", "Hindi", "Bengali", "Sanskrit", "German", "French", "Other Language"],
+  },
+  {
+    group: "General",
+    subjects: ["Revision", "Other"],
+  },
+];
+
+function getRecentSubjects(): string[] {
+  const sessions = getSessions();
+  const seen = new Set<string>();
+  const recent: string[] = [];
+  for (let i = sessions.length - 1; i >= 0; i--) {
+    const s = sessions[i].subject;
+    if (!seen.has(s)) {
+      seen.add(s);
+      recent.push(s);
+    }
+    if (recent.length >= 3) break;
+  }
+  return recent;
+}
 
 function RatingRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
@@ -48,6 +88,7 @@ export default function LogScreen() {
     notes: "",
   });
   const [saved, setSaved] = useState(false);
+  const recentSubjects = getRecentSubjects();
 
   function handleSubmit() {
     const session = {
@@ -81,7 +122,20 @@ export default function LogScreen() {
           onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
           style={selectStyle}
         >
-          {SUBJECTS.map((s) => <option key={s}>{s}</option>)}
+          {recentSubjects.length > 0 && (
+            <optgroup label="Recently Used">
+              {recentSubjects.map((s) => (
+                <option key={`recent-${s}`} value={s}>{s}</option>
+              ))}
+            </optgroup>
+          )}
+          {SUBJECT_GROUPS.map(({ group, subjects }) => (
+            <optgroup key={group} label={group}>
+              {subjects.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </optgroup>
+          ))}
         </select>
       </div>
 
