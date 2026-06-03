@@ -1,8 +1,15 @@
 import { useState } from "react";
-import { getSessions, clearSessions } from "../storage";
+import { getSessions, clearSessions, deleteSession } from "../storage";
 
 export default function HistoryScreen() {
   const [sessions, setSessions] = useState(() => [...getSessions()].reverse());
+
+  function handleDelete(id: string) {
+    if (window.confirm("Delete this session?")) {
+      deleteSession(id);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    }
+  }
 
   function handleClear() {
     if (window.confirm("Are you sure you want to delete all sessions?")) {
@@ -31,9 +38,18 @@ export default function HistoryScreen() {
         {sessions.map((s) => (
           <div key={s.id} style={card}>
             {/* Top row */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
               <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{s.subject}</span>
-              <span style={{ fontSize: 11, color: "#555" }}>{s.date} · {s.duration}min</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 11, color: "#555" }}>{s.date} · {s.duration}min</span>
+                <button
+                  onClick={() => handleDelete(s.id)}
+                  title="Delete session"
+                  style={deleteBtn}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Metrics row */}
@@ -81,6 +97,19 @@ const card: React.CSSProperties = {
   background: "rgba(255,255,255,0.03)",
   border: "1px solid rgba(255,255,255,0.07)",
   borderRadius: 10,
+};
+
+const deleteBtn: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "#3a3a3a",
+  fontSize: 11,
+  cursor: "pointer",
+  padding: "2px 4px",
+  lineHeight: 1,
+  borderRadius: 4,
+  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
+  flexShrink: 0,
 };
 
 const clearBtn: React.CSSProperties = {
