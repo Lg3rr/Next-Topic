@@ -1,6 +1,19 @@
 import { useState } from "react";
 import { addSession, getSessions } from "../storage";
 
+function todayStr(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function clampDate(value: string): string {
+  const today = todayStr();
+  const min = new Date();
+  min.setDate(min.getDate() - 7);
+  const minStr = min.toISOString().split("T")[0];
+  if (!value || value > today || value < minStr) return today;
+  return value;
+}
+
 const SUBJECT_GROUPS: { group: string; subjects: string[] }[] = [
   {
     group: "Science",
@@ -81,6 +94,7 @@ function RatingRow({ label, value, onChange }: { label: string; value: number; o
 export default function LogScreen() {
   const [form, setForm] = useState({
     subject: "Math",
+    date: todayStr(),
     duration: 60,
     difficulty: 3,
     focus: 3,
@@ -93,12 +107,11 @@ export default function LogScreen() {
   function handleSubmit() {
     const session = {
       id: String(Date.now()),
-      date: new Date().toISOString().split("T")[0],
       ...form,
     };
     addSession(session);
     setSaved(true);
-    setForm({ subject: "Math", duration: 60, difficulty: 3, focus: 3, retention: 3, notes: "" });
+    setForm({ subject: "Math", date: todayStr(), duration: 60, difficulty: 3, focus: 3, retention: 3, notes: "" });
     setTimeout(() => setSaved(false), 2000);
   }
 
@@ -137,6 +150,23 @@ export default function LogScreen() {
             </optgroup>
           ))}
         </select>
+      </div>
+
+      {/* Date */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={labelStyle}>Date</div>
+        <input
+          type="date"
+          value={form.date}
+          max={todayStr()}
+          onChange={(e) => setForm((f) => ({ ...f, date: clampDate(e.target.value) }))}
+          style={{ ...selectStyle, colorScheme: "dark" }}
+        />
+        {form.date !== todayStr() && (
+          <div style={{ fontSize: 11, color: "#555", marginTop: 6 }}>
+            Logging for {form.date}
+          </div>
+        )}
       </div>
 
       {/* Duration */}
