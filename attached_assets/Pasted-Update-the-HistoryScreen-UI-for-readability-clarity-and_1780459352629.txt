@@ -1,0 +1,149 @@
+Update the HistoryScreen UI for readability, clarity, and better mobile usability.
+
+IMPORTANT:
+- Do NOT change any data logic, storage, or structure.
+- Only improve UI, layout, and formatting.
+
+----------------------------------------
+
+1. FONT FIX (CRITICAL)
+
+- Remove the current monospaced "hacker" font.
+- Replace with a clean sans-serif font:
+  - "Inter", fallback to "Roboto" or system-ui
+- Apply this to ALL text in HistoryScreen.
+
+----------------------------------------
+
+2. CARD-BASED LAYOUT (MAJOR CHANGE)
+
+Current issue:
+- Sessions look like plain text blocks → hard to scan
+
+Fix:
+- Each session should be displayed as a **separate card**
+
+Card style:
+- Slight background contrast (dark grey vs black)
+- Rounded corners (border-radius)
+- Padding inside (12–16px)
+- Space between cards
+
+----------------------------------------
+
+3. SESSION STRUCTURE (MAKE IT SCANNABLE)
+
+Inside each card:
+
+TOP ROW:
+- Subject (bold, slightly larger)
+- Date + duration (smaller, right aligned)
+
+Example:
+Physics              2026-06-01 · 45min
+
+----------------------------------------
+
+MIDDLE ROW:
+- Metrics in clean format:
+
+Instead of:
+DIFF 3/5, FOCUS 2/5, SAT 2/5
+
+Use:
+Difficulty: 3/5  
+Focus: 2/5  
+Retention: 2/5
+
+OR compact version:
+D: 3/5   F: 2/5   R: 2/5
+
+(choose whichever fits better visually, but must be clean)
+
+----------------------------------------
+
+BOTTOM ROW:
+- Notes (if present)
+- Style:
+  - slightly dim text
+  - max 2 lines (truncate with "..." if too long)
+
+----------------------------------------
+
+4. COLOR USAGE
+
+- Use green ONLY for:
+  - subject highlight OR small accent
+- Keep most text:
+  - white (primary)
+  - grey (secondary)
+
+- Do NOT overuse neon green
+
+----------------------------------------
+
+5. EMPTY STATE (IMPORTANT)
+
+If no sessions exist:
+
+Show:
+"No sessions logged yet"
+
+Optional subtext:
+"Start logging to see your history"
+
+----------------------------------------
+
+6. CLEAR DATA BUTTON (FIX THIS)
+
+Current issue:
+- "CLEAR ALL DATA" looks dangerous + ugly
+
+Fix:
+- Convert into a subtle button
+
+Style:
+- smaller size
+- muted red or grey
+- add confirmation step:
+
+On click:
+→ show confirm dialog:
+"Are you sure you want to delete all sessions?"
+
+----------------------------------------
+
+7. SPACING IMPROVEMENT
+
+- Add spacing between:
+  - cards
+  - sections
+- Avoid cramped layout
+
+----------------------------------------
+
+8. OPTIONAL (IF EASY)
+
+- Show most recent session at top (reverse order)
+- Add slight divider or spacing between cards
+
+----------------------------------------
+
+CONSTRAINTS:
+
+- DO NOT modify:
+  - session data structure
+  - storage functions
+  - filtering logic
+
+- ONLY change:
+  - layout
+  - styling
+  - visual hierarchy
+
+----------------------------------------
+
+OUTPUT:
+
+- Return updated HistoryScreen.jsx only
+- No explanations
