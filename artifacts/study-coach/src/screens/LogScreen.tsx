@@ -16,31 +16,55 @@ function clampDate(value: string): string {
 }
 
 const SUBJECT_GROUPS: { group: string; subjects: string[] }[] = [
-  {
-    group: "Science",
-    subjects: ["Physics", "Chemistry", "Biology", "Math"],
-  },
-  {
-    group: "Commerce",
-    subjects: ["Accountancy", "Business Studies", "Economics", "Entrepreneurship", "Finance", "Marketing", "Banking", "Taxation"],
-  },
-  {
-    group: "Arts / Humanities",
-    subjects: ["History", "Political Science", "Geography", "Sociology", "Psychology", "Philosophy", "Literature", "Fine Arts", "Music"],
-  },
-  {
-    group: "Tech / Skills",
-    subjects: ["Programming", "Computer Science", "AI / Machine Learning", "Web Development", "Data Science", "Graphic Design"],
-  },
-  {
-    group: "Languages",
-    subjects: ["English", "Hindi", "Bengali", "Sanskrit", "German", "French", "Other Language"],
-  },
-  {
-    group: "General",
-    subjects: ["Revision", "Other"],
-  },
+  { group: "Science", subjects: ["Physics", "Chemistry", "Biology", "Math"] },
+  { group: "Commerce", subjects: ["Accountancy", "Business Studies", "Economics", "Entrepreneurship", "Finance", "Marketing", "Banking", "Taxation"] },
+  { group: "Arts / Humanities", subjects: ["History", "Political Science", "Geography", "Sociology", "Psychology", "Philosophy", "Literature", "Fine Arts", "Music"] },
+  { group: "Tech / Skills", subjects: ["Programming", "Computer Science", "AI / Machine Learning", "Web Development", "Data Science", "Graphic Design"] },
+  { group: "Languages", subjects: ["English", "Hindi", "Bengali", "Sanskrit", "German", "French", "Other Language"] },
+  { group: "General", subjects: ["Revision", "Other"] },
 ];
+
+interface TooltipData {
+  title: string;
+  desc: string;
+  lines: string[];
+}
+
+const TOOLTIPS: Record<string, TooltipData> = {
+  Focus: {
+    title: "Focus",
+    desc: "How well were you able to concentrate during this study session?",
+    lines: [
+      "1 — Constantly distracted",
+      "2 — Frequently distracted",
+      "3 — Average focus",
+      "4 — Mostly focused",
+      "5 — Completely focused",
+    ],
+  },
+  Retention: {
+    title: "Retention",
+    desc: "How much of the material do you feel you understood and can recall?",
+    lines: [
+      "1 — Remembered very little",
+      "2 — Remembered some concepts",
+      "3 — Understood most concepts",
+      "4 — Can recall most material",
+      "5 — Can confidently explain the topic",
+    ],
+  },
+  Difficulty: {
+    title: "Difficulty",
+    desc: "How difficult did the topic feel while studying?",
+    lines: [
+      "1 — Very easy",
+      "2 — Easy",
+      "3 — Moderate",
+      "4 — Hard",
+      "5 — Very challenging",
+    ],
+  },
+};
 
 function getRecentSubjects(): string[] {
   const sessions = getSessions();
@@ -48,19 +72,47 @@ function getRecentSubjects(): string[] {
   const recent: string[] = [];
   for (let i = sessions.length - 1; i >= 0; i--) {
     const s = sessions[i].subject;
-    if (!seen.has(s)) {
-      seen.add(s);
-      recent.push(s);
-    }
+    if (!seen.has(s)) { seen.add(s); recent.push(s); }
     if (recent.length >= 3) break;
   }
   return recent;
 }
 
-function RatingRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function RatingRow({
+  label,
+  value,
+  onChange,
+  onHelp,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  onHelp: () => void;
+}) {
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ fontSize: 11, letterSpacing: 1, color: "#666", marginBottom: 10, fontFamily: "inherit" }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+        <span style={{ fontSize: 11, letterSpacing: 1, color: "#666", fontFamily: "inherit" }}>{label}</span>
+        <button
+          onClick={onHelp}
+          style={{
+            background: "transparent",
+            border: "1px solid #333",
+            color: "#444",
+            fontSize: 9,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            cursor: "pointer",
+            padding: 0,
+            lineHeight: "14px",
+            fontFamily: "inherit",
+            flexShrink: 0,
+          }}
+        >
+          ?
+        </button>
+      </div>
       <div style={{ display: "flex", gap: 8 }}>
         {[1, 2, 3, 4, 5].map((n) => {
           const isActive = value === n;
@@ -110,6 +162,7 @@ interface Props {
 export default function LogScreen({ editSession, onEditDone }: Props) {
   const [form, setForm] = useState(emptyForm);
   const [saved, setSaved] = useState(false);
+  const [activeTooltip, setActiveTooltip] = useState<TooltipData | null>(null);
   const recentSubjects = getRecentSubjects();
 
   useEffect(() => {
@@ -142,12 +195,52 @@ export default function LogScreen({ editSession, onEditDone }: Props) {
   }
 
   return (
-    <div style={{
-      padding: "24px 20px",
-      maxWidth: 480,
-      margin: "0 auto",
-      fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-    }}>
+    <div style={{ padding: "24px 20px", maxWidth: 480, margin: "0 auto", fontFamily: "'Inter', 'Roboto', system-ui, sans-serif" }}>
+
+      {/* Tooltip modal */}
+      {activeTooltip && (
+        <div
+          onClick={() => setActiveTooltip(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 100,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "0 24px",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#111",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 12,
+              padding: "24px 20px",
+              maxWidth: 360,
+              width: "100%",
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#e0e0e0", marginBottom: 8 }}>{activeTooltip.title}</div>
+            <div style={{ fontSize: 12, color: "#666", lineHeight: 1.6, marginBottom: 14 }}>{activeTooltip.desc}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {activeTooltip.lines.map((line) => (
+                <div key={line} style={{ fontSize: 12, color: "#555", lineHeight: 1.5 }}>{line}</div>
+              ))}
+            </div>
+            <button
+              onClick={() => setActiveTooltip(null)}
+              style={{
+                marginTop: 20, width: "100%", padding: "10px 0",
+                background: "transparent", border: "1px solid rgba(255,255,255,0.08)",
+                color: "#555", fontSize: 13, cursor: "pointer", borderRadius: 6,
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontSize: 16, fontWeight: 600, color: "#e0e0e0", marginBottom: 4 }}>
           {editSession ? "Editing Session" : "Log Session"}
@@ -195,9 +288,7 @@ export default function LogScreen({ editSession, onEditDone }: Props) {
           style={{ ...selectStyle, colorScheme: "dark" }}
         />
         {form.date !== todayStr() && (
-          <div style={{ fontSize: 11, color: "#555", marginTop: 6 }}>
-            Logging for {form.date}
-          </div>
+          <div style={{ fontSize: 11, color: "#555", marginTop: 6 }}>Logging for {form.date}</div>
         )}
       </div>
 
@@ -214,9 +305,29 @@ export default function LogScreen({ editSession, onEditDone }: Props) {
         />
       </div>
 
-      <RatingRow label="Difficulty" value={form.difficulty} onChange={(v) => setForm((f) => ({ ...f, difficulty: v }))} />
-      <RatingRow label="Focus" value={form.focus} onChange={(v) => setForm((f) => ({ ...f, focus: v }))} />
-      <RatingRow label="Retention" value={form.retention} onChange={(v) => setForm((f) => ({ ...f, retention: v }))} />
+      <RatingRow
+        label="Difficulty"
+        value={form.difficulty}
+        onChange={(v) => setForm((f) => ({ ...f, difficulty: v }))}
+        onHelp={() => setActiveTooltip(TOOLTIPS.Difficulty)}
+      />
+      <RatingRow
+        label="Focus"
+        value={form.focus}
+        onChange={(v) => setForm((f) => ({ ...f, focus: v }))}
+        onHelp={() => setActiveTooltip(TOOLTIPS.Focus)}
+      />
+      <RatingRow
+        label="Retention"
+        value={form.retention}
+        onChange={(v) => setForm((f) => ({ ...f, retention: v }))}
+        onHelp={() => setActiveTooltip(TOOLTIPS.Retention)}
+      />
+
+      {/* Honesty hint */}
+      <div style={{ fontSize: 11, color: "#3a3a3a", marginBottom: 24, marginTop: -8 }}>
+        Rate honestly. These ratings improve AI analysis accuracy.
+      </div>
 
       {/* Notes */}
       <div style={{ marginBottom: 28 }}>
@@ -235,57 +346,38 @@ export default function LogScreen({ editSession, onEditDone }: Props) {
       </button>
 
       {editSession && (
-        <button onClick={onEditDone} style={cancelBtn}>
-          Cancel
-        </button>
+        <button onClick={onEditDone} style={cancelBtn}>Cancel</button>
       )}
     </div>
   );
 }
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 12,
-  color: "#888",
-  marginBottom: 8,
-  fontWeight: 500,
-  letterSpacing: 0.2,
+  fontSize: 12, color: "#888", marginBottom: 8, fontWeight: 500, letterSpacing: 0.2,
 };
 
 const selectStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "10px 12px",
+  width: "100%", padding: "10px 12px",
   background: "rgba(255,255,255,0.03)",
   border: "1px solid rgba(255,255,255,0.1)",
-  color: "#e0e0e0",
-  fontSize: 14,
-  borderRadius: 6,
+  color: "#e0e0e0", fontSize: 14, borderRadius: 6,
   fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
   boxSizing: "border-box",
 };
 
 const primaryBtn: React.CSSProperties = {
-  width: "100%",
-  padding: "16px 0",
+  width: "100%", padding: "16px 0",
   background: "rgba(0,255,135,0.1)",
   border: "1px solid rgba(0,255,135,0.3)",
-  color: "#00ff87",
-  fontSize: 14,
-  fontWeight: 600,
-  letterSpacing: 0.5,
-  cursor: "pointer",
-  borderRadius: 8,
+  color: "#00ff87", fontSize: 14, fontWeight: 600, letterSpacing: 0.5,
+  cursor: "pointer", borderRadius: 8,
   fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
 };
 
 const cancelBtn: React.CSSProperties = {
-  width: "100%",
-  marginTop: 10,
-  padding: "14px 0",
+  width: "100%", marginTop: 10, padding: "14px 0",
   background: "transparent",
   border: "1px solid rgba(255,255,255,0.08)",
-  color: "#555",
-  fontSize: 14,
-  cursor: "pointer",
-  borderRadius: 8,
+  color: "#555", fontSize: 14, cursor: "pointer", borderRadius: 8,
   fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
 };
