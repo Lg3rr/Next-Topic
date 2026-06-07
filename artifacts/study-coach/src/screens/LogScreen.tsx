@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { addSession, getSessions } from "../storage";
+import { useState, useEffect } from "react";
+import { addSession, updateSession, getSessions } from "../storage";
+import type { Session } from "../storage";
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
@@ -91,28 +92,53 @@ function RatingRow({ label, value, onChange }: { label: string; value: number; o
   );
 }
 
-export default function LogScreen() {
-  const [form, setForm] = useState({
-    subject: "Math",
-    date: todayStr(),
-    duration: 60,
-    difficulty: 3,
-    focus: 3,
-    retention: 3,
-    notes: "",
-  });
+const emptyForm = {
+  subject: "Math",
+  date: todayStr(),
+  duration: 60,
+  difficulty: 3,
+  focus: 3,
+  retention: 3,
+  notes: "",
+};
+
+interface Props {
+  editSession: Session | null;
+  onEditDone: () => void;
+}
+
+export default function LogScreen({ editSession, onEditDone }: Props) {
+  const [form, setForm] = useState(emptyForm);
   const [saved, setSaved] = useState(false);
   const recentSubjects = getRecentSubjects();
 
+  useEffect(() => {
+    if (editSession) {
+      setForm({
+        subject: editSession.subject,
+        date: editSession.date,
+        duration: editSession.duration,
+        difficulty: editSession.difficulty,
+        focus: editSession.focus,
+        retention: editSession.retention,
+        notes: editSession.notes,
+      });
+    } else {
+      setForm({ ...emptyForm, date: todayStr() });
+    }
+    setSaved(false);
+  }, [editSession]);
+
   function handleSubmit() {
-    const session = {
-      id: String(Date.now()),
-      ...form,
-    };
-    addSession(session);
-    setSaved(true);
-    setForm({ subject: "Math", date: todayStr(), duration: 60, difficulty: 3, focus: 3, retention: 3, notes: "" });
-    setTimeout(() => setSaved(false), 2000);
+    if (editSession) {
+      updateSession({ ...editSession, ...form });
+      onEditDone();
+    } else {
+      addSession({ id: String(Date.now()), ...form });
+      setSaved(true);
+      setForm({ ...emptyForm, date: todayStr() });
+      setTimeout(() => setSaved(false), 2000);
+    }
   }
 
   return (
@@ -123,8 +149,14 @@ export default function LogScreen() {
       fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
     }}>
       <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: "#e0e0e0", marginBottom: 4 }}>Log Session</div>
-        <div style={{ fontSize: 12, color: "#444" }}>Log your last study session (takes ~30 seconds)</div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: "#e0e0e0", marginBottom: 4 }}>
+          {editSession ? "Editing Session" : "Log Session"}
+        </div>
+        <div style={{ fontSize: 12, color: "#444" }}>
+          {editSession
+            ? "Update the fields below and save your changes"
+            : "Log your last study session (takes ~30 seconds)"}
+        </div>
       </div>
 
       {/* Subject */}
@@ -199,8 +231,14 @@ export default function LogScreen() {
       </div>
 
       <button onClick={handleSubmit} style={primaryBtn}>
-        {saved ? "✓ Saved" : "Log Session"}
+        {editSession ? "Save Changes" : (saved ? "✓ Saved" : "Log Session")}
       </button>
+
+      {editSession && (
+        <button onClick={onEditDone} style={cancelBtn}>
+          Cancel
+        </button>
+      )}
     </div>
   );
 }
@@ -234,6 +272,19 @@ const primaryBtn: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 600,
   letterSpacing: 0.5,
+  cursor: "pointer",
+  borderRadius: 8,
+  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
+};
+
+const cancelBtn: React.CSSProperties = {
+  width: "100%",
+  marginTop: 10,
+  padding: "14px 0",
+  background: "transparent",
+  border: "1px solid rgba(255,255,255,0.08)",
+  color: "#555",
+  fontSize: 14,
   cursor: "pointer",
   borderRadius: 8,
   fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",

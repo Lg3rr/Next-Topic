@@ -43,6 +43,11 @@ export function addSession(session: Session): void {
   localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
 }
 
+export function updateSession(session: Session): void {
+  const sessions = getSessions().map((s) => (s.id === session.id ? session : s));
+  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+}
+
 export function deleteSession(id: string): void {
   const sessions = getSessions().filter((s) => s.id !== id);
   localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));

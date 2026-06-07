@@ -2,12 +2,29 @@ import { useState } from "react";
 import LogScreen from "./screens/LogScreen";
 import HistoryScreen from "./screens/HistoryScreen";
 import AnalysisScreen from "./screens/AnalysisScreen";
+import type { Session } from "./storage";
 
 const TABS = ["log", "history", "analysis"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
+  const [editSession, setEditSession] = useState<Session | null>(null);
+
+  function handleEdit(session: Session) {
+    setEditSession(session);
+    setTab("log");
+  }
+
+  function handleEditDone() {
+    setEditSession(null);
+    setTab("history");
+  }
+
+  function handleTabChange(t: Tab) {
+    if (t !== "log") setEditSession(null);
+    setTab(t);
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#e0e0e0", fontFamily: "'Courier New', monospace" }}>
@@ -19,8 +36,8 @@ export default function App() {
       </div>
 
       <div style={{ paddingBottom: 60 }}>
-        {tab === "log"      && <LogScreen />}
-        {tab === "history"  && <HistoryScreen />}
+        {tab === "log"      && <LogScreen editSession={editSession} onEditDone={handleEditDone} />}
+        {tab === "history"  && <HistoryScreen onEdit={handleEdit} />}
         {tab === "analysis" && <AnalysisScreen />}
       </div>
 
@@ -30,7 +47,7 @@ export default function App() {
         background: "#0a0a0f",
       }}>
         {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)} style={{
+          <button key={t} onClick={() => handleTabChange(t)} style={{
             flex: 1, padding: "14px 0",
             background: "transparent",
             border: "none",

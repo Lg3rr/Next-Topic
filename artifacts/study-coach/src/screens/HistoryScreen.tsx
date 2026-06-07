@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { getSessions, clearSessions, deleteSession } from "../storage";
+import type { Session } from "../storage";
 
-export default function HistoryScreen() {
+interface Props {
+  onEdit: (session: Session) => void;
+}
+
+export default function HistoryScreen({ onEdit }: Props) {
   const [sessions, setSessions] = useState(() => [...getSessions()].reverse());
 
   function handleDelete(id: string) {
@@ -40,15 +45,10 @@ export default function HistoryScreen() {
             {/* Top row */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
               <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{s.subject}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 11, color: "#555" }}>{s.date} · {s.duration}min</span>
-                <button
-                  onClick={() => handleDelete(s.id)}
-                  title="Delete session"
-                  style={deleteBtn}
-                >
-                  ✕
-                </button>
+                <button onClick={() => onEdit(s)} title="Edit session" style={editBtn}>✎</button>
+                <button onClick={() => handleDelete(s.id)} title="Delete session" style={deleteBtn}>✕</button>
               </div>
             </div>
 
@@ -97,6 +97,19 @@ const card: React.CSSProperties = {
   background: "rgba(255,255,255,0.03)",
   border: "1px solid rgba(255,255,255,0.07)",
   borderRadius: 10,
+};
+
+const editBtn: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "#444",
+  fontSize: 13,
+  cursor: "pointer",
+  padding: "2px 4px",
+  lineHeight: 1,
+  borderRadius: 4,
+  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
+  flexShrink: 0,
 };
 
 const deleteBtn: React.CSSProperties = {
