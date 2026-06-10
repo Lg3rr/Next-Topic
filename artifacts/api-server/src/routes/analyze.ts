@@ -39,7 +39,7 @@ function isQuotaError(err: unknown): boolean {
 
 router.post("/analyze", async (req, res): Promise<void> => {
   try {
-    const { sessions } = req.body;
+    const { sessions, interviewContext } = req.body;
 
     if (!Array.isArray(sessions)) {
       res.status(400).json({ error: "sessions must be an array" });
@@ -142,7 +142,10 @@ OUTPUT FORMAT (strict JSON only, no markdown, no code fences):
 DATA:
 - Total study time: ${totalMinutes} minutes
 - Sessions:
-${sessionSummary}`;
+${sessionSummary}${interviewContext ? `
+
+STUDENT SELF-REPORT (from post-session interview — treat this as high-signal context):
+${interviewContext}` : ""}`;
 
     let raw = "";
 

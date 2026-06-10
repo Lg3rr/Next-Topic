@@ -157,9 +157,10 @@ const emptyForm = {
 interface Props {
   editSession: Session | null;
   onEditDone: () => void;
+  onSessionSaved: (session: Session) => void;
 }
 
-export default function LogScreen({ editSession, onEditDone }: Props) {
+export default function LogScreen({ editSession, onEditDone, onSessionSaved }: Props) {
   const [form, setForm] = useState(emptyForm);
   const [saved, setSaved] = useState(false);
   const [activeTooltip, setActiveTooltip] = useState<TooltipData | null>(null);
@@ -187,10 +188,10 @@ export default function LogScreen({ editSession, onEditDone }: Props) {
       updateSession({ ...editSession, ...form });
       onEditDone();
     } else {
-      addSession({ id: String(Date.now()), ...form });
-      setSaved(true);
+      const session: Session = { id: String(Date.now()), ...form };
+      addSession(session);
       setForm({ ...emptyForm, date: todayStr() });
-      setTimeout(() => setSaved(false), 2000);
+      onSessionSaved(session);
     }
   }
 

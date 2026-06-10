@@ -2,6 +2,7 @@ import { useState } from "react";
 import LogScreen from "./screens/LogScreen";
 import HistoryScreen from "./screens/HistoryScreen";
 import AnalysisScreen from "./screens/AnalysisScreen";
+import InterviewScreen from "./screens/InterviewScreen";
 import type { Session } from "./storage";
 
 const TABS = ["log", "history", "analysis"] as const;
@@ -10,6 +11,16 @@ type Tab = (typeof TABS)[number];
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
   const [editSession, setEditSession] = useState<Session | null>(null);
+  const [interviewSession, setInterviewSession] = useState<Session | null>(null);
+
+  function handleSessionSaved(session: Session) {
+    setInterviewSession(session);
+  }
+
+  function handleInterviewDone() {
+    setInterviewSession(null);
+    setTab("analysis");
+  }
 
   function handleEdit(session: Session) {
     setEditSession(session);
@@ -23,8 +34,11 @@ export default function App() {
 
   function handleTabChange(t: Tab) {
     if (t !== "log") setEditSession(null);
+    setInterviewSession(null);
     setTab(t);
   }
+
+  const showInterview = interviewSession !== null;
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#e0e0e0", fontFamily: "'Courier New', monospace" }}>
@@ -36,9 +50,12 @@ export default function App() {
       </div>
 
       <div style={{ paddingBottom: 60 }}>
-        {tab === "log"      && <LogScreen editSession={editSession} onEditDone={handleEditDone} />}
-        {tab === "history"  && <HistoryScreen onEdit={handleEdit} />}
-        {tab === "analysis" && <AnalysisScreen />}
+        {showInterview
+          ? <InterviewScreen session={interviewSession} onDone={handleInterviewDone} />
+          : tab === "log"      ? <LogScreen editSession={editSession} onEditDone={handleEditDone} onSessionSaved={handleSessionSaved} />
+          : tab === "history"  ? <HistoryScreen onEdit={handleEdit} />
+          : <AnalysisScreen />
+        }
       </div>
 
       <div style={{
@@ -52,8 +69,8 @@ export default function App() {
             background: "transparent",
             border: "none",
             borderTop: "2px solid",
-            borderColor: tab === t ? "#00ff87" : "transparent",
-            color: tab === t ? "#00ff87" : "#444",
+            borderColor: (!showInterview && tab === t) ? "#00ff87" : "transparent",
+            color: (!showInterview && tab === t) ? "#00ff87" : "#444",
             fontSize: 9, letterSpacing: 3,
             cursor: "pointer", fontFamily: "inherit",
             textTransform: "uppercase",
