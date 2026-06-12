@@ -370,7 +370,7 @@ const primaryBtn: React.CSSProperties = {
   width: "100%", padding: "16px 0",
   background: "rgba(0,255,135,0.1)",
   border: "1px solid rgba(0,255,135,0.3)",
-  color: "#11221f", fontSize: 14, fontWeight: 600, letterSpacing: 0.5,
+  color: "#ecfdf5", fontSize: 14, fontWeight: 600, letterSpacing: 0.5,
   cursor: "pointer", borderRadius: 8,
   fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
 };
