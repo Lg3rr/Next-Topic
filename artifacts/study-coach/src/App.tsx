@@ -41,7 +41,7 @@ export default function App() {
   const showInterview = interviewSession !== null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#061613", color: "#ECFDF5", fontFamily: "'Courier New', monospace" }}>
+    <div style={{ minHeight: "100vh", background: "#061214", color: "#ECFDF5", fontFamily: "'Courier New', monospace" }}>
       <div style={{ padding: "20px 20px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <div style={{ fontSize: 9, letterSpacing: 4, color: "#444" }}>NEXT TOPIC</div>
         <div style={{ fontSize: 18, fontWeight: "bold", color: "#fff", letterSpacing: 1, marginBottom: 16 }}>
