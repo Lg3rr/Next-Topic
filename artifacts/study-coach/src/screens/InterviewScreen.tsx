@@ -13,23 +13,69 @@ interface InterviewAnswers {
   q2: string;
 }
 
-const QUESTIONS: Record<SessionType, { q1: string; q2: string; q1Options?: string[]; q2Options?: string[] }> = {
-  Practice: {
-    q1: "Roughly how many questions did you attempt?",
-    q2: "Were they easy, mixed, or difficult?",
-    q2Options: ["Easy", "Mixed", "Difficult"],
-  },
-  Theory: {
-    q1: "How confident are you about this topic?",
-    q1Options: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
-    q2: "Still any doubts, or mostly clear?",
-    q2Options: ["Still have doubts", "Mostly clear"],
-  },
-  Revision: {
-    q1: "How much did you remember before revising?",
-    q1Options: ["Almost everything", "Some", "Very little"],
-    q2: "",
-  },
+const QUESTIONS: Record<SessionType, { q1: string; q2: string; q1Options?: string[]; q2Options?: string[]; q3?: string;        // Added ? here
+  q3Options?: string[] }> = {
+ Practice: {
+  q1: "Roughly how many questions did you attempt?",
+  q2: "How was your accuracy?",
+  q2Options: [
+    "Mostly Correct (80%+)",
+    "Mixed (50% - 80%)",
+    "Struggled (<50%)"
+  ],
+  q3: "What slowed you down the most today?",
+  q3Options: [
+    "Concept gaps",
+    "Calculation mistakes",
+    "Careless errors",
+    "Speed",
+    "Focus",
+    "Nothing major"
+  ]
+},
+
+Theory: {
+  q1: "How confident are you about this topic?",
+  q1Options: ["1","2","3","4","5","6","7","8","9","10"],
+  q2: "What best describes your understanding?",
+  q2Options: [
+    "Can explain it to someone else",
+    "Understand but need practice",
+    "Understand parts of it",
+    "Still confused"
+  ],
+  q3: "What is the biggest thing holding you back?",
+  q3Options: [
+    "Concepts aren't clear",
+    "Can't remember details",
+    "Need more examples",
+    "Need question practice",
+    "Nothing major"
+  ]
+},
+
+Revision: {
+  q1: "How much did you remember before revising?",
+  q1Options: [
+    "Almost everything",
+    "Some",
+    "Very little"
+  ],
+  q2: "After revising, how does it feel now?",
+  q2Options: [
+    "Locked in",
+    "Mostly clear",
+    "Needs another revision soon"
+  ],
+  q3: "What still needs work?",
+  q3Options: [
+    "Memory",
+    "Understanding",
+    "Question solving",
+    "Speed",
+    "Nothing major"
+  ]
+}
 };
 
 interface Props {
