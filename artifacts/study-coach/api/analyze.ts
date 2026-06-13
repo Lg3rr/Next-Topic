@@ -1,7 +1,15 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+const FALLBACK_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+];
 
 function getApiKeys(): string[] {
   return [
@@ -11,6 +19,10 @@ function getApiKeys(): string[] {
     process.env.GEMINI_API_KEY_4,
   ].filter((k): k is string => typeof k === "string" && k.trim().length > 0);
 }
+
+// ---------------------------------------------------------------------------
+// Error classification
+// ---------------------------------------------------------------------------
 
 function isOverloaded(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -34,6 +46,10 @@ function isQuotaError(err: unknown): boolean {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 type Session = {
   date: string;
   subject: string;
@@ -44,35 +60,19 @@ type Session = {
   notes: string;
 };
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+// ---------------------------------------------------------------------------
+// Prompt builder
+// ---------------------------------------------------------------------------
 
-  const { sessions } = req.body;
-
-  if (!Array.isArray(sessions)) {
-    return res.status(400).json({ error: "sessions must be an array" });
-  }
-
-  const apiKeys = getApiKeys();
-  if (apiKeys.length === 0) {
-    return res.status(500).json({ error: "No Gemini API key configured" });
-  }
-
-  const uniqueDays = new Set((sessions as Session[]).map((s) => s.date)).size;
-  const totalMinutes = (sessions as Session[]).reduce((sum, s) => sum + s.duration, 0);
-
-  const sessionSummary = (sessions as Session[])
-    .map(
-      (s) =>
-        `- ${s.date}: ${s.subject}, ${s.duration}min, difficulty=${s.difficulty}/5, focus=${s.focus}/5, retention=${s.retention}/5${s.notes ? `, notes: "${s.notes}"` : ""}`
-    )
-    .join("\n");
-
+function buildPrompt(
+  sessions: Session[],
+  uniqueDays: number,
+  totalMinutes: number,
+  sessionSummary: string
+): string {
   const isSingleDay = uniqueDays === 1;
 
-  const consistencySection = isSingleDay
+  const modeSection = isSingleDay
     ? `SINGLE-DAY MODE — STRICT RULES:
 - All sessions are from the same day. This is a single-day performance snapshot, not a weekly review.
 - Do NOT evaluate consistency, active days, or study frequency.
@@ -84,60 +84,141 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 - Active study days: ${uniqueDays}/7 — evaluate consistency across the week.
 - Status should reflect both session quality and study frequency.`;
 
-  const prompt = `You are a sharp, no-nonsense study coach. You give honest, concise feedback that cuts straight to what matters.
+  return `${modeSection}
+
+You are a calm, precise study performance coach. You analyze session data honestly, track what's changing over time, and give the student one clear direction forward.
+
+You are NOT a motivational speaker. You are NOT a strict examiner.
+Every output must make the student feel: "I understand my situation and I know exactly what to do next."
 
 ---
 
-TONE & STYLE RULES:
-- Be concise and sharp. Every sentence must earn its place.
-- No corporate or academic phrasing. No words like "it is evident that", "significant", "it is crucial to note", "comprehensive", "optimize", "leverage".
-- Write like a smart coach talking to a student — plain, direct, human.
-- Do NOT list 5 observations when 2 strong ones will do. Quality over quantity.
-- Do NOT repeat the same idea in different words across patterns, callouts, or improvement points. If two issues are related, combine them into one clear statement.
-- Identify the single most critical issue and make sure it stands out clearly.
-- If the student's notes mention a specific mistake or behavior (e.g. "kept losing focus", "just went through formulas", "couldn't solve without help"), call it out explicitly by name in simple language.
-- Never insult. Focus on behavior, not character.
-- Use numbers when they make a point stronger (e.g. "focus was 1/5 in 2 out of 3 Physics sessions").
-- The "status_reason" field must be a single core diagnosis sentence — one sentence that names the root cause behind all the patterns, not just a surface observation. Example: "You're putting in time but studying passively, which means hours spent aren't translating into retention."
+SIGNAL PRIORITY (read in this order):
+1. Student notes — highest authority. "Fixed", "improved", "stopped doing" = treat as resolved unless new data contradicts it.
+2. Recent session behavior (patterns, not single outliers)
+3. Retention score (learning outcome)
+4. Focus score (attention quality)
+5. Duration (effort signal — only cite when it reveals something retention/focus don't)
+6. Difficulty (context only)
 
 ---
 
-INTERPRETATION RULE:
-Don't label behavior harshly. Instead describe it plainly:
+OUTPUT COMPRESSION RULE:
+If two outputs describe the same underlying issue, merge them.
+Never repeat the same behavioral signal across patterns, callouts, and progress_notes.
+Each distinct insight should appear only once in the entire response.
+
+---
+
+ANTI-HALLUCINATION RULE:
+- Do NOT repeat past issues already marked resolved in notes
+- Do NOT assume a problem persists without current session evidence
+- Do NOT invent trends not supported by the data
+- If notes say "fixed focus issue" → focus is resolved unless new sessions show decline
+
+---
+
+FIELD UTILIZATION:
+Focus and retention scores are always relevant. Duration and difficulty should only be cited when they add signal that focus/retention alone don't capture.
+
+Extract signal from each session:
+- focus_score: is it consistently low, high, or volatile across sessions?
+- retention_score: compare to focus — high focus + low retention = method problem, not effort problem
+- duration: flag long sessions with low retention only when it changes the diagnosis
+- difficulty: low retention on easy material is more alarming than low retention on hard material
+- notes: primary behavioral evidence. Quote or paraphrase specific behaviors directly. If notes contradict scores, flag the conflict in one sentence.
+- subject: group patterns by subject — don't treat sessions in isolation
+
+Only include fields that contribute meaningfully. Forced mentions dilute the analysis.
+
+---
+
+GROUNDING RULE:
+Every insight must be traceable to at least one session — identified by subject plus at least one field value OR a direct note reference. Don't cite fields for the sake of it; cite what actually drives the point.
+
+BANNED OUTPUT PATTERNS:
+- "Your focus could be better" → say "Focus was 2/5 in [Subject]"
+- "You struggled with retention" → say "Retention dropped to 3/5 in [Subject] despite 90 min logged"
+- "Try to stay more focused" → name what caused the drop, per the notes
+
+Validity rule: any insight that cannot be traced to a session field value or note must be removed.
+
+---
+
+PROGRESSION TRACKING:
+Classify every identified issue as exactly one of:
+- NEW ISSUE — recently detected, not seen before
+- ONGOING ISSUE — confirmed across multiple recent sessions
+- RESOLVED ISSUE — previously flagged, now fixed per notes or data
+
+If unclear → only use ONGOING if multiple recent sessions confirm it.
+
+---
+
+INTERPRETATION GUIDE:
 - Low focus + low retention = "went through the material without really engaging"
+- High focus + low retention = "concentrated effort that isn't sticking — method problem, not effort problem"
+- Low focus + high retention = "retained despite low engagement — likely familiar material"
+- Long duration + low retention = "spent [X] min but retained very little — engagement is the constraint, not time"
 - Passive study = "reading without testing yourself"
-- Inefficient time = "spent X minutes but retained very little"
-
-CONFIDENCE & CONSISTENCY RULES:
-- Be confident in your analysis even if the data has minor inconsistencies. Don't hedge or second-guess — give a clear verdict.
-- Focus on behavioral patterns across sessions, not just subject labels.
-- If a session's notes clearly don't match the subject (e.g. chemistry notes logged under Math), mention it briefly in one sentence — don't dwell on it. Example: "One Math session looks like it might have been a Chemistry revision — minor logging inconsistency, doesn't change the overall picture."
+- Low retention on easy material = "focus or method issue, not a difficulty ceiling"
 
 ---
 
-${consistencySection}
+TONE RULES:
+- Calm, direct, grounded. No hype, no guilt, no emotional pressure.
+- No corporate phrasing. Banned: "significant", "optimize", "leverage", "it is evident that", "comprehensive", "holistic".
+- Plain coach voice — every sentence earns its place.
+- Highlight improvement before criticism. Never shame. Never repeat resolved failures.
+- Use numbers when they sharpen a point. Don't use them as filler.
 
 ---
 
-OUTPUT FORMAT (strict JSON only, no markdown, no code fences):
+STATUS DIAGNOSIS:
+- LOCKED_IN: high focus AND high retention across most sessions, notes show active engagement
+- COASTING: decent scores but notes reveal passive behavior — re-reading, no self-testing
+- INCONSISTENT: large variance in focus or retention, no clear pattern
+- STRUGGLING: low retention across sessions, especially on non-difficult material
+
+status_reason = ONE sentence naming the root behavioral cause.
+  Bad: "Your focus scores varied across sessions."
+  Good: "You're moving through material without testing yourself, so time spent isn't converting to retention."
+
+---
+
+NEXT ACTION PLAN RULE:
+This is the most important output field.
+- Name exactly what to study (subject + task type)
+- Match weak patterns — but never repeat resolved issues
+- Realistic for 1 day of study
+- Prioritize highest-impact change
+
+Bad: "Improve math"
+Good: "Do 3 timed algebra problem sets + review mistakes from last session (retention was 3/5 on familiar material)"
+
+---
+
+STRICT JSON OUTPUT — NO EXCEPTIONS:
+Return ONLY a valid JSON object. No markdown, no code fences, no text outside the JSON.
 
 {
-  "status": "LOCKED_IN | INCONSISTENT | STRUGGLING | COASTING",
-  "level": 1-10,
-  "status_reason": "one clear sentence",
-  "patterns": ["string", "string", "string"],
-  "callouts": ["string", "string"],
-  "weak_subjects": ["string"],
-  "improvement_points": ["string"],
-  "tomorrow_plan": [
-    {
-      "subject": "string",
-      "duration_minutes": number,
-      "priority": "HIGH | MEDIUM | LOW",
-      "focus_tip": "how to study this properly in one sentence"
-    }
+  "status": "LOCKED_IN" | "COASTING" | "INCONSISTENT" | "STRUGGLING",
+  "status_reason": "<one root-cause sentence>",
+  "current_state": "<short factual summary of where the student is right now>",
+  "progress_notes": [
+    "<what improved — cite session or note>",
+    "<what declined — cite session or note>"
   ],
-  "one_liner": "direct but respectful summary of current performance"
+  "patterns": ["<grounded pattern with session reference>"],
+  "callouts": ["<specific behavioral callout with session + field or note reference>"],
+  "key_blocker": "<single biggest issue right now — classified as NEW / ONGOING / RESOLVED>",
+  "next_action_plan": [
+    {
+      "subject": "",
+      "task": "",
+      "reason": ""
+    }
+  ]
 }
 
 ---
@@ -146,6 +227,48 @@ DATA:
 - Total study time: ${totalMinutes} minutes
 - Sessions:
 ${sessionSummary}`;
+}
+
+// ---------------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------------
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const { sessions } = req.body;
+
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    return res.status(400).json({ error: "sessions must be a non-empty array" });
+  }
+
+  const apiKeys = getApiKeys();
+  if (apiKeys.length === 0) {
+    return res.status(500).json({ error: "No Gemini API key configured" });
+  }
+
+  const typedSessions = sessions as Session[];
+
+  const uniqueDays = new Set(typedSessions.map((s) => s.date)).size;
+  const totalMinutes = typedSessions.reduce((sum, s) => sum + s.duration, 0);
+
+  const sessionSummary = typedSessions
+    .map(
+      (s) =>
+        `- ${s.date}: ${s.subject}, ${s.duration}min, difficulty=${s.difficulty}/5, focus=${s.focus}/5, retention=${s.retention}/5${
+          s.notes ? `, notes: "${s.notes}"` : ""
+        }`
+    )
+    .join("\n");
+
+  const prompt = buildPrompt(
+    typedSessions,
+    uniqueDays,
+    totalMinutes,
+    sessionSummary
+  );
 
   let raw = "";
 
@@ -155,20 +278,34 @@ ${sessionSummary}`;
     for (const modelName of FALLBACK_MODELS) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          console.info({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Calling Gemini");
+          console.info(
+            { keyIndex: keyIndex + 1, model: modelName, attempt },
+            "Calling Gemini"
+          );
           const model = genAI.getGenerativeModel({ model: modelName });
           const result = await model.generateContent(prompt);
           raw = result.response.text();
           break outer;
         } catch (err: unknown) {
           if (isQuotaError(err)) {
-            console.warn({ keyIndex: keyIndex + 1, model: modelName }, "Quota exhausted, trying next key");
-            break;
+            console.warn(
+              { keyIndex: keyIndex + 1, model: modelName },
+              "Quota exhausted, trying next key"
+            );
+            break; // next API key
           } else if (isOverloaded(err)) {
-            console.warn({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Overloaded, retrying");
+            console.warn(
+              { keyIndex: keyIndex + 1, model: modelName, attempt },
+              "Overloaded, retrying"
+            );
             if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
           } else {
-            throw err;
+            // Unknown error — log and try next model
+            console.error(
+              { keyIndex: keyIndex + 1, model: modelName, attempt, err },
+              "Unknown error"
+            );
+            break;
           }
         }
       }
@@ -177,20 +314,25 @@ ${sessionSummary}`;
 
   if (!raw) {
     return res.status(503).json({
-      error: "All API keys are currently exhausted or unavailable. Please try again later or add more API keys.",
+      error: "All Gemini API keys and models exhausted. Try again later.",
     });
   }
 
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    console.error("Failed to extract JSON from Gemini response:", raw);
-    return res.status(500).json({ error: "Failed to parse analysis response. Please try again." });
-  }
+  // Strip accidental markdown fences the model may have added despite instructions
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
 
   try {
-    const analysis = JSON.parse(jsonMatch[0]);
-    return res.status(200).json(analysis);
+    const parsed = JSON.parse(cleaned);
+    return res.status(200).json(parsed);
   } catch {
-    return res.status(500).json({ error: "Failed to parse analysis response. Please try again." });
+    console.error({ raw }, "Failed to parse Gemini JSON response");
+    return res.status(502).json({
+      error: "Model returned invalid JSON.",
+      raw,
+    });
   }
 }
