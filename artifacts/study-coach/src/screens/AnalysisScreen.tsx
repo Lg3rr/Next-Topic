@@ -118,7 +118,7 @@ export default function AnalysisScreen() {
           {/* Status block */}
           <div style={{ ...section, borderColor: color + "30", background: color + "0a", textAlign: "center", padding: "24px 20px" }}>
             <div style={{ fontSize: 22, fontWeight: 700, color, letterSpacing: 1, marginBottom: 4 }}>
-              {analysis.status}
+              {status}
             </div>
             <div style={{ fontSize: 32, fontWeight: 700, color, marginBottom: 10 }}>
               {analysis.performance_level}<span style={{ fontSize: 16, color: color + "80", fontWeight: 400 }}>/10</span>
@@ -168,39 +168,28 @@ export default function AnalysisScreen() {
               </div>
             </div>
           )}
-
-          {/* Tomorrow's Plan */}
-          {analysis.tomorrow_plan?.length > 0 && (
-            <div style={section}>
-              <SectionTitle>Tomorrow's Plan</SectionTitle>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
-                {analysis.tomorrow_plan.map((t, i) => (
-                  <div key={i} style={planCard}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{t.subject}</span>
-                        <span style={{ fontSize: 12, color: "#666" }}>{t.duration_minutes}min</span>
-                      </div>
-                      <span style={{
-                        fontSize: 10, fontWeight: 600,
-                        color: PRIORITY_COLOR[t.priority] ?? "#555",
-                        letterSpacing: 0.5,
-                        padding: "2px 8px",
-                        border: `1px solid ${PRIORITY_COLOR[t.priority] ?? "#555"}40`,
-                        borderRadius: 4,
-                      }}>
-                        {t.priority}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 12, color: "#666", lineHeight: 1.6 }}>{t.focus_tip}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
+          {/* nExt action */}
+          
+          {analysis.next_action_plan?.length > 0 && (
+  <div style={section}>
+    <SectionTitle>What to Study Next</SectionTitle>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+      {analysis.next_action_plan.map((t, i) => (
+        <div key={i} style={planCard}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 6 }}>
+            {t.subject}
+          </div>
+          <div style={{ fontSize: 13, color: "#aaa", lineHeight: 1.6, marginBottom: 6 }}>
+            {t.task}
+          </div>
+          <div style={{ fontSize: 11, color: "#555", lineHeight: 1.5 }}>
+            {t.reason}
+          </div>
         </div>
-      )}
+      ))}
+    </div>
+  </div>
+)}
 
       {/* Subject Statistics */}
       {stats.length > 0 && (
