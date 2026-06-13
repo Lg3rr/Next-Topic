@@ -15,12 +15,6 @@ const STATUS_COLOR: Record<string, string> = {
   COASTING: "#a78bfa",
 };
 
-const PRIORITY_COLOR: Record<string, string> = {
-  HIGH: "#ff4d6d",
-  MEDIUM: "#ffb800",
-  LOW: "#555",
-};
-
 const font = "'Inter', 'Roboto', system-ui, sans-serif";
 
 interface SubjectStat {
@@ -35,12 +29,24 @@ interface SubjectStat {
 function computeStats(sessions: Session[]): SubjectStat[] {
   const map: Record<
     string,
-    { hours: number; sessions: number; focus: number[]; retention: number[]; difficulty: number[] }
+    {
+      hours: number;
+      sessions: number;
+      focus: number[];
+      retention: number[];
+      difficulty: number[];
+    }
   > = {};
 
   for (const s of sessions) {
     if (!map[s.subject]) {
-      map[s.subject] = { hours: 0, sessions: 0, focus: [], retention: [], difficulty: [] };
+      map[s.subject] = {
+        hours: 0,
+        sessions: 0,
+        focus: [],
+        retention: [],
+        difficulty: [],
+      };
     }
 
     map[s.subject].hours += s.duration / 60;
@@ -69,6 +75,7 @@ export default function AnalysisScreen() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(() =>
     getLastAnalysis()
   );
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionCount, setSessionCount] = useState(() => getSessions().length);
@@ -80,7 +87,7 @@ export default function AnalysisScreen() {
     try {
       const sessions = getSessions();
 
-      if (sessions.length === 0) {
+      if (!sessions.length) {
         setError("No sessions logged yet. Add some study sessions first.");
         setLoading(false);
         return;
@@ -89,8 +96,6 @@ export default function AnalysisScreen() {
       setSessionCount(sessions.length);
 
       const result = await analyzeStudy(sessions);
-
-      console.log("RAW RESULT:", result);
 
       saveLastAnalysis(result);
       setAnalysis(result);
@@ -101,25 +106,16 @@ export default function AnalysisScreen() {
     setLoading(false);
   }
 
-  const color = analysis ? STATUS_COLOR[analysis.status] ?? "#fff" : "#fff";
   const sessions = getSessions();
   const stats = computeStats(sessions);
 
-  const mostStudied =
-    stats.length > 0 ? stats.reduce((a, b) => (a.hours > b.hours ? a : b)) : null;
-
-  const highestFocus =
-    stats.length > 0 ? stats.reduce((a, b) => (a.avgFocus > b.avgFocus ? a : b)) : null;
-
-  const highestRetention =
-    stats.length > 0
-      ? stats.reduce((a, b) => (a.avgRetention > b.avgRetention ? a : b))
-      : null;
+  const color =
+    analysis?.status && STATUS_COLOR[analysis.status]
+      ? STATUS_COLOR[analysis.status]
+      : "#fff";
 
   return (
     <div style={{ padding: 24, maxWidth: 480, margin: "0 auto", fontFamily: font }}>
-
-      {/* Button */}
       <button onClick={handleAnalyze} disabled={loading} style={analyzeBtn(loading)}>
         {loading ? "Analyzing..." : "Run Analysis"}
       </button>
@@ -131,7 +127,9 @@ export default function AnalysisScreen() {
       )}
 
       {error && (
-        <div style={{ color: "#ff4d6d", marginTop: 12, fontSize: 13 }}>{error}</div>
+        <div style={{ color: "#ff4d6d", marginTop: 12, fontSize: 13 }}>
+          {error}
+        </div>
       )}
 
       {!analysis && !loading && !error && (
@@ -140,10 +138,9 @@ export default function AnalysisScreen() {
         </div>
       )}
 
-      {analysis && !loading && (
+      {analysis && (
         <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-
-          {/* Status */}
+          {/* Status Card */}
           <div
             style={{
               padding: 20,
@@ -153,22 +150,23 @@ export default function AnalysisScreen() {
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: 20, fontWeight: 700, color }}>{analysis.status}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color }}>
+              {analysis.status}
+            </div>
 
             <div style={{ fontSize: 32, fontWeight: 700, color }}>
-              {analysis.level ?? 0}
-              <span style={{ fontSize: 16, opacity: 0.7 }}>/10</span>
+              {analysis.level ?? 0}/10
             </div>
 
             <div style={{ fontSize: 13, color: "#aaa" }}>
-              {analysis.status_reason || "No reason"}
+              {analysis.status_reason}
             </div>
           </div>
 
           {/* One liner */}
           <div style={section}>
             <div style={{ color: "#bbb", fontStyle: "italic" }}>
-              "{analysis.one_liner || ""}"
+              "{analysis.one_liner}"
             </div>
           </div>
 
@@ -192,40 +190,12 @@ export default function AnalysisScreen() {
             </div>
           )}
 
-          {/* Improve */}
+          {/* Improvements */}
           {analysis.improvement_points?.length > 0 && (
             <div style={section}>
-              <Title>Improve</Title>
+              <Title>How to Improve</Title>
               {analysis.improvement_points.map((p, i) => (
                 <Bullet key={i} text={p} color="#00ff87" />
-              ))}
-            </div>
-          )}
-
-          {/* Weak */}
-          {analysis.weak_subjects?.length > 0 && (
-            <div style={section}>
-              <Title>Weak Subjects</Title>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {analysis.weak_subjects.map((s) => (
-                  <span key={s} style={pill}>{s}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Plan */}
-          {analysis.tomorrow_plan?.length > 0 && (
-            <div style={section}>
-              <Title>Tomorrow Plan</Title>
-              {analysis.tomorrow_plan.map((t, i) => (
-                <div key={i} style={card}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <b>{t.subject}</b>
-                    <span style={{ color: "#666" }}>{t.duration_minutes} min</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#666" }}>{t.focus_tip}</div>
-                </div>
               ))}
             </div>
           )}
@@ -237,23 +207,21 @@ export default function AnalysisScreen() {
         <div style={{ marginTop: 30 }}>
           <Title>Subject Stats</Title>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {stats.map((s) => (
-              <div key={s.subject} style={section}>
-                <b>{s.subject}</b>
-                <div style={{ fontSize: 12, color: "#666" }}>
-                  Hours: {s.hours.toFixed(1)} | Sessions: {s.sessions}
-                </div>
+          {stats.map((s) => (
+            <div key={s.subject} style={section}>
+              <b>{s.subject}</b>
+              <div style={{ fontSize: 12, color: "#666" }}>
+                {s.hours.toFixed(1)} hrs • {s.sessions} sessions
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-/* UI helpers */
+/* helpers */
 
 function analyzeBtn(loading: boolean): React.CSSProperties {
   return {
@@ -275,7 +243,7 @@ const section: React.CSSProperties = {
   marginBottom: 10,
 };
 
-function Title({ children }: any) {
+function Title({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ fontSize: 12, color: "#777", marginBottom: 8 }}>
       {children}
@@ -291,18 +259,3 @@ function Bullet({ text, color }: { text: string; color: string }) {
     </div>
   );
 }
-
-const pill: React.CSSProperties = {
-  padding: "4px 10px",
-  borderRadius: 20,
-  border: "1px solid #333",
-  fontSize: 12,
-  color: "#aaa",
-};
-
-const card: React.CSSProperties = {
-  padding: 10,
-  border: "1px solid #222",
-  borderRadius: 8,
-  marginTop: 8,
-};
