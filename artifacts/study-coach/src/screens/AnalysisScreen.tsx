@@ -79,8 +79,8 @@ export default function AnalysisScreen() {
     setLoading(false);
   }
 
-  const color = analysis ? (STATUS_COLOR[analysis.status] ?? "#fff") : "#fff";
-  const allSessions = getSessions();
+  const status = analysis ? normalizeStatus(analysis.status) : "";
+  const color = STATUS_COLOR[status] ?? "#fff";  const allSessions = getSessions();
   const stats = computeStats(allSessions);
 
   const mostStudied = stats.length > 0 ? stats.reduce((a, b) => a.hours > b.hours ? a : b) : null;
