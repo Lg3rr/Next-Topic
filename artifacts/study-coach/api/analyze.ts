@@ -49,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { sessions, interviewContext } = req.body;
+  const { sessions } = req.body;
 
   if (!Array.isArray(sessions)) {
     return res.status(400).json({ error: "sessions must be an array" });
