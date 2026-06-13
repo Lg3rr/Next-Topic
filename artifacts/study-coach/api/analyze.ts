@@ -198,11 +198,34 @@ Good: "Do 3 timed algebra problem sets + review mistakes from last session (rete
 
 ---
 
+DATE RULE — NON-NEGOTIABLE:
+Do NOT reference any dates, day names, or timestamps anywhere in the output.
+Refer to sessions only as "Session 1", "Session 2", etc., or by subject name alone.
+Any output field containing a date string (e.g. "2026-06-07") is invalid and must be removed.
+
+---
+
+performance_level: integer 1–10, derived as follows:
+- Start at 5
+- +1 per subject where avg retention >= 4.0
+- +1 if avg focus across all sessions >= 4.0
+- -1 per subject where avg retention <= 3.0
+- -1 if key_blocker is ONGOING
+- Clamp result between 1 and 10
+
+one_liner: one sentence. Honest, plain, no corporate phrasing. Must reflect the actual status — not generic encouragement.
+  Bad: "Keep up the great work!"
+  Good: "You're sharp when you hit the books, but showing up consistently is your next hurdle."
+
+---
+
 STRICT JSON OUTPUT — NO EXCEPTIONS:
 Return ONLY a valid JSON object. No markdown, no code fences, no text outside the JSON.
 
 {
   "status": "LOCKED_IN" | "COASTING" | "INCONSISTENT" | "STRUGGLING",
+  "performance_level": <integer 1-10>,
+  "one_liner": "<one honest sentence capturing the student's current situation>",
   "status_reason": "<one root-cause sentence>",
   "current_state": "<short factual summary of where the student is right now>",
   "progress_notes": [
@@ -256,8 +279,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sessionSummary = typedSessions
     .map(
-      (s) =>
-        `- ${s.date}: ${s.subject}, ${s.duration}min, difficulty=${s.difficulty}/5, focus=${s.focus}/5, retention=${s.retention}/5${
+      (s, i) =>
+        `- Session ${i + 1}: ${s.subject}, ${s.duration}min, difficulty=${s.difficulty}/5, focus=${s.focus}/5, retention=${s.retention}/5${
           s.notes ? `, notes: "${s.notes}"` : ""
         }`
     )
