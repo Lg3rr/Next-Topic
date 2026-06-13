@@ -88,6 +88,7 @@ export default function InterviewScreen({ session, onDone }: Props) {
   const [sessionType, setSessionType] = useState<SessionType | null>(null);
   const [q1, setQ1] = useState("");
   const [q2, setQ2] = useState("");
+  const [q3, setQ3] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function runAnalysis(interviewContext?: string) {
@@ -109,12 +110,17 @@ export default function InterviewScreen({ session, onDone }: Props) {
   }
 
   function handleSubmit() {
-    if (!sessionType) return;
-    const q = QUESTIONS[sessionType];
-    const parts: string[] = [`Session type: ${sessionType}`];
-    if (q1) parts.push(`${q.q1} → ${q1}`);
-    if (q2 && q.q2) parts.push(`${q.q2} → ${q2}`);
-    runAnalysis(parts.join("\n"));
+  if (!sessionType) return;
+  const q = QUESTIONS[sessionType];
+  const parts: string[] = [`Session type: ${sessionType}`];
+  parts.push(`${q.q1} → ${q1 || "Skipped"}`);
+  if (q.q2) {
+    parts.push(`${q.q2} → ${q2 || "Skipped"}`);
+  }
+  if (q.q3) {
+    parts.push(`${q.q3} → ${q3 || "Skipped"}`);
+  }
+  runAnalysis(parts.join("\n"));
   }
 
   if (step === "loading") {
