@@ -10,20 +10,20 @@ export interface Session {
 }
 
 export interface AnalysisResult {
-  status: "LOCKED_IN" | "INCONSISTENT" | "STRUGGLING" | "COASTING";
-  level: number;
-  status_reason: string;
+  status: string;
+  performance_level: number;        // renamed from level
   one_liner: string;
+  status_reason: string;
+  current_state: string;
+  progress_notes: string[];
   patterns: string[];
   callouts: string[];
-  weak_subjects: string[];
-  improvement_points: string[];
-  tomorrow_plan: {
-    subject: string;
-    duration_minutes: number;
-    priority: "HIGH" | "MEDIUM" | "LOW";
-    focus_tip: string;
-  }[];
+  key_blocker: string;
+  next_action_plan: { subject: string; task: string; reason: string }[];
+  // legacy fields — keep until you remove them from the UI
+  improvement_points?: string[];
+  weak_subjects?: string[];
+  tomorrow_plan?: { subject: string; duration_minutes: number; priority: string; focus_tip: string }[];
 }
 
 const SESSIONS_KEY = "study_coach_sessions";
