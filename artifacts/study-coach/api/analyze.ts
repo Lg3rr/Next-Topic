@@ -194,9 +194,10 @@ ${sessionSummary}`;
 
   try {
     const analysis = JSON.parse(jsonMatch[0]);
-    return res.status(200).json({
-  received: req.body;
     console.log("INTERVIEW CONTEXT RECEIVED:", interviewContext);
+
+return res.status(200).json({
+  received: req.body,
 });
   } catch {
     return res.status(500).json({ error: "Failed to parse analysis response. Please try again." });
