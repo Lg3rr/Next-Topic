@@ -49,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { sessions } = req.body;
+  const { sessions, interviewContext } = req.body;
 
   if (!Array.isArray(sessions)) {
     return res.status(400).json({ error: "sessions must be an array" });
@@ -141,6 +141,11 @@ OUTPUT FORMAT (strict JSON only, no markdown, no code fences):
 }
 
 ---
+
+${interviewContext ? `
+USER INTERVIEW CONTEXT:
+${interviewContext}
+` : ""}
 
 DATA:
 - Total study time: ${totalMinutes} minutes
