@@ -6,10 +6,27 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // ---------------------------------------------------------------------------
 
 const FALLBACK_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
   "gemini-1.5-flash",
+  "gemini-2.0-flash",
+  "gemini-2.5-flash",
 ];
+
+const keyCooldowns = new Map<string, number>();
+
+function isKeyCoolingDown(key: string): boolean {
+  const until = keyCooldowns.get(key);
+  if (!until) return false;
+  if (Date.now() > until) {
+    keyCooldowns.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function coolDownKey(key: string, ms = 60_000) {
+  keyCooldowns.set(key, Date.now() + ms);
+}
+
 
 function getApiKeys(): string[] {
   return [
@@ -296,44 +313,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let raw = "";
 
   outer: for (const [keyIndex, apiKey] of apiKeys.entries()) {
-    const genAI = new GoogleGenerativeAI(apiKey);
+  if (isKeyCoolingDown(apiKey)) {
+    console.warn({ keyIndex: keyIndex + 1 }, "Key cooling down, skipping");
+    continue;
+  }
 
-    for (const modelName of FALLBACK_MODELS) {
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          console.info(
-            { keyIndex: keyIndex + 1, model: modelName, attempt },
-            "Calling Gemini"
-          );
-          const model = genAI.getGenerativeModel({ model: modelName });
-          const result = await model.generateContent(prompt);
-          raw = result.response.text();
-          break outer;
-        } catch (err: unknown) {
-          if (isQuotaError(err)) {
-            console.warn(
-              { keyIndex: keyIndex + 1, model: modelName },
-              "Quota exhausted, trying next key"
-            );
-            break; // next API key
-          } else if (isOverloaded(err)) {
-            console.warn(
-              { keyIndex: keyIndex + 1, model: modelName, attempt },
-              "Overloaded, retrying"
-            );
-            if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
-          } else {
-            // Unknown error — log and try next model
-            console.error(
-              { keyIndex: keyIndex + 1, model: modelName, attempt, err },
-              "Unknown error"
-            );
-            break;
-          }
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  for (const modelName of FALLBACK_MODELS) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.info({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Calling Gemini");
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(prompt);
+        raw = result.response.text();
+        break outer;
+      } catch (err: unknown) {
+        if (isQuotaError(err)) {
+          coolDownKey(apiKey);
+          console.warn({ keyIndex: keyIndex + 1, model: modelName }, "Quota hit, cooling key for 60s");
+          break;
+        } else if (isOverloaded(err)) {
+          console.warn({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Overloaded, retrying");
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
+        } else {
+          console.error({ keyIndex: keyIndex + 1, model: modelName, attempt, err }, "Unknown error");
+          break;
         }
       }
     }
   }
+}
 
   if (!raw) {
     return res.status(503).json({
