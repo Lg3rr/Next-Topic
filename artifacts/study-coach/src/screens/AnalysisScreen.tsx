@@ -117,7 +117,7 @@ export default function AnalysisScreen() {
               {analysis.status}
             </div>
             <div style={{ fontSize: 32, fontWeight: 700, color, marginBottom: 10 }}>
-              {analysis.level}<span style={{ fontSize: 16, color: color + "80", fontWeight: 400 }}>/10</span>
+              {analysis.performance_level}<span style={{ fontSize: 16, color: color + "80", fontWeight: 400 }}>/10</span>
             </div>
             <div style={{ fontSize: 13, color: "#aaa", lineHeight: 1.6 }}>
               {analysis.status_reason}
