@@ -56,15 +56,31 @@ export default function AnalysisScreen() {
   const [sessionCount, setSessionCount] = useState(() => getSessions().length);
 
   async function handleAnalyze() {
-    setLoading(true);
-    setError(null);
-    try {
-      const sessions = getSessions();
-      if (sessions.length === 0) {
-        setError("No sessions logged yet. Add some study sessions first.");
-        setLoading(false);
-        return;
-      }
+  setLoading(true);
+  setError(null);
+
+  try {
+    const sessions = getSessions();
+
+    if (sessions.length === 0) {
+      setError("No sessions logged yet. Add some study sessions first.");
+      setLoading(false);
+      return;
+    }
+
+    const result = await analyzeStudy(sessions);
+
+    console.log("RAW RESULT:", result);
+
+    saveLastAnalysis(result);
+    setAnalysis(result);
+
+  } catch (e) {
+    setError(e instanceof Error ? e.message : "Unknown error");
+  }
+
+  setLoading(false);
+}
       setSessionCount(sessions.length);
       const result = await analyzeStudy(sessions);
       saveLastAnalysis(result);
