@@ -191,6 +191,9 @@ export default function AnalysisScreen() {
   </div>
 )}
 
+        </div>
+      )}
+
       {/* Subject Statistics */}
       {stats.length > 0 && (
         <div style={{ marginTop: 32 }}>
