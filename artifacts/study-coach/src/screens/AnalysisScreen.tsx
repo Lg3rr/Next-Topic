@@ -117,17 +117,17 @@ export default function AnalysisScreen() {
               {analysis.status}
             </div>
             <div style={{ fontSize: 32, fontWeight: 700, color, marginBottom: 10 }}>
-              {analysis.level}<span style={{ fontSize: 16, color: color + "80", fontWeight: 400 }}>/10</span>
+              {analysis.level ?? 0}<span style={{ fontSize: 16, color: color + "80", fontWeight: 400 }}>/10</span>
             </div>
             <div style={{ fontSize: 13, color: "#aaa", lineHeight: 1.6 }}>
-              {analysis.status_reason}
+              {analysis.status_reason || "No analysis available"}
             </div>
           </div>
 
           {/* One-liner */}
           <div style={{ ...section, borderColor: "rgba(255,255,255,0.06)" }}>
             <div style={{ fontSize: 13, color: "#bbb", fontStyle: "italic", lineHeight: 1.7 }}>
-              "{analysis.one_liner}"
+              "{analysis.one_liner || ""}"
             </div>
           </div>
 
