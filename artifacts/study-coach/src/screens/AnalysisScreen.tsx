@@ -49,6 +49,10 @@ function computeStats(sessions: Session[]): SubjectStat[] {
     .sort((a, b) => b.hours - a.hours);
 }
 
+function normalizeStatus(raw: string): string {
+  return raw?.trim().toUpperCase().replace(/\s+/g, "_") ?? "INCONSISTENT";
+}
+
 export default function AnalysisScreen() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(() => getLastAnalysis());
   const [loading, setLoading] = useState(false);
