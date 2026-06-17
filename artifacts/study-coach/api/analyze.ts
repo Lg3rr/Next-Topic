@@ -205,13 +205,29 @@ status_reason = ONE sentence naming the root behavioral cause.
 
 NEXT ACTION PLAN RULE:
 This is the most important output field.
-- Name exactly what to study (subject + task type)
-- Match weak patterns — but never repeat resolved issues
-- Realistic for 1 day of study
-- Prioritize highest-impact change
 
-Bad: "Improve math"
-Good: "Do 3 timed algebra problem sets + review mistakes from last session (retention was 3/5 on familiar material)"
+TASK DISTRIBUTION — NON-NEGOTIABLE:
+- Generate a minimum of 2 tasks for EVERY subject present in the session data.
+- Generate 3 tasks for any subject that has: low retention (avg < 3.5), high difficulty, or is identified as a weak pattern.
+- Never skip a subject unless it has zero sessions.
+- Total tasks must scale with subject count — never cap at 1 or 2 tasks total.
+
+Validation: before returning the plan, verify every subject from the session data has at least 2 tasks assigned. If any subject has fewer than 2, add tasks until the condition is met.
+
+TASK QUALITY RULES:
+- Every task must name a specific activity, not a subject label.
+- Bad: "Study Biology" / "Improve Chemistry"
+- Good: "Solve 25 MCQs from Genetics chapters 4–6" / "Redo stoichiometry problem sets focusing on multi-step reactions"
+- Each task must be completable in one study session.
+- Match tasks to diagnosed weak patterns — but never repeat resolved issues.
+- Prioritize highest-impact improvement per subject.
+
+TASK FORMAT — each entry in next_action_plan:
+{
+  "subject": "<subject name>",
+  "task": "<specific, actionable task description>",
+  "reason": "<one sentence linking this task to a specific session pattern or score>"
+}
 
 ---
 
