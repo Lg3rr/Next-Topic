@@ -1,5 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createHash } from "crypto";
+import { db } from "../src/lib/db";
+import { studySessionsTable, apiUsageLogsTable } from "../src/lib/schema";
+import { eq } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -16,17 +20,13 @@ const keyCooldowns = new Map<string, number>();
 function isKeyCoolingDown(key: string): boolean {
   const until = keyCooldowns.get(key);
   if (!until) return false;
-  if (Date.now() > until) {
-    keyCooldowns.delete(key);
-    return false;
-  }
+  if (Date.now() > until) { keyCooldowns.delete(key); return false; }
   return true;
 }
 
 function coolDownKey(key: string, ms = 60_000) {
   keyCooldowns.set(key, Date.now() + ms);
 }
-
 
 function getApiKeys(): string[] {
   return [
@@ -43,24 +43,12 @@ function getApiKeys(): string[] {
 
 function isOverloaded(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return (
-    msg.includes("503") ||
-    msg.includes("high demand") ||
-    msg.includes("overloaded") ||
-    msg.includes("Service Unavailable")
-  );
+  return msg.includes("503") || msg.includes("high demand") || msg.includes("overloaded") || msg.includes("Service Unavailable");
 }
 
 function isQuotaError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return (
-    msg.includes("429") ||
-    msg.includes("quota") ||
-    msg.includes("RESOURCE_EXHAUSTED") ||
-    msg.includes("rate limit") ||
-    msg.includes("out of tokens") ||
-    msg.includes("billing")
-  );
+  return msg.includes("429") || msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("rate limit") || msg.includes("out of tokens") || msg.includes("billing");
 }
 
 // ---------------------------------------------------------------------------
@@ -78,15 +66,10 @@ type Session = {
 };
 
 // ---------------------------------------------------------------------------
-// Prompt builder
+// Prompt builder (unchanged)
 // ---------------------------------------------------------------------------
 
-function buildPrompt(
-  sessions: Session[],
-  uniqueDays: number,
-  totalMinutes: number,
-  sessionSummary: string
-): string {
+function buildPrompt(sessions: Session[], uniqueDays: number, totalMinutes: number, sessionSummary: string): string {
   const isSingleDay = uniqueDays === 1;
 
   const modeSection = isSingleDay
@@ -306,82 +289,148 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const typedSessions = sessions as Session[];
-
   const uniqueDays = new Set(typedSessions.map((s) => s.date)).size;
   const totalMinutes = typedSessions.reduce((sum, s) => sum + s.duration, 0);
-
   const sessionSummary = typedSessions
-    .map(
-      (s, i) =>
-        `- Session ${i + 1}: ${s.subject}, ${s.duration}min, difficulty=${s.difficulty}/5, focus=${s.focus}/5, retention=${s.retention}/5${
-          s.notes ? `, notes: "${s.notes}"` : ""
-        }`
-    )
+    .map((s, i) => `- Session ${i + 1}: ${s.subject}, ${s.duration}min, difficulty=${s.difficulty}/5, focus=${s.focus}/5, retention=${s.retention}/5${s.notes ? `, notes: "${s.notes}"` : ""}`)
     .join("\n");
 
-  const prompt = buildPrompt(
-    typedSessions,
-    uniqueDays,
-    totalMinutes,
-    sessionSummary
-  );
+  const prompt = buildPrompt(typedSessions, uniqueDays, totalMinutes, sessionSummary);
 
-  let raw = "";
+  // ── Cache check ────────────────────────────────────────────────────────────
+  const cacheKey = createHash("sha256").update(prompt).digest("hex");
 
-  outer: for (const [keyIndex, apiKey] of apiKeys.entries()) {
-  if (isKeyCoolingDown(apiKey)) {
-    console.warn({ keyIndex: keyIndex + 1 }, "Key cooling down, skipping");
-    continue;
+  try {
+    const cached = await db
+      .select()
+      .from(studySessionsTable)
+      .where(eq(studySessionsTable.cacheKey, cacheKey))
+      .limit(1);
+
+    if (cached.length > 0 && cached[0].outputText && cached[0].status === "COMPLETED") {
+      console.info("Cache hit — skipping Gemini call");
+      return res.status(200).json(JSON.parse(cached[0].outputText));
+    }
+  } catch (err) {
+    console.warn("Cache check failed, proceeding without cache:", err);
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
+  // ── Create session record ──────────────────────────────────────────────────
+  let sessionId: string | null = null;
+  try {
+    const [session] = await db
+      .insert(studySessionsTable)
+      .values({
+        subject: typedSessions.map((s) => s.subject).join(", "),
+        inputText: JSON.stringify(typedSessions),
+        status: "PROCESSING",
+        cacheKey,
+        metadata: { uniqueDays, totalMinutes, sessionCount: typedSessions.length },
+      })
+      .returning({ id: studySessionsTable.id });
+    sessionId = session.id;
+  } catch (err) {
+    console.warn("Failed to create session record:", err);
+  }
 
-  for (const modelName of FALLBACK_MODELS) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.info({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Calling Gemini");
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(prompt);
-        raw = result.response.text();
-        break outer;
-      } catch (err: unknown) {
-        if (isQuotaError(err)) {
-          coolDownKey(apiKey);
-          console.warn({ keyIndex: keyIndex + 1, model: modelName }, "Quota hit, cooling key for 60s");
-          break;
-        } else if (isOverloaded(err)) {
-          console.warn({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Overloaded, retrying");
-          if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
-        } else {
-          console.error({ keyIndex: keyIndex + 1, model: modelName, attempt, err }, "Unknown error");
-          break;
+  // ── Gemini call ────────────────────────────────────────────────────────────
+  let raw = "";
+  let usedModel = "";
+  let apiStatus: "SUCCESS" | "QUOTA_EXHAUSTED" | "ERROR" = "ERROR";
+  const startTime = Date.now();
+
+  outer: for (const [keyIndex, apiKey] of apiKeys.entries()) {
+    if (isKeyCoolingDown(apiKey)) {
+      console.warn({ keyIndex: keyIndex + 1 }, "Key cooling down, skipping");
+      continue;
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    for (const modelName of FALLBACK_MODELS) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.info({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Calling Gemini");
+          const model = genAI.getGenerativeModel({ model: modelName });
+          const result = await model.generateContent(prompt);
+          raw = result.response.text();
+          usedModel = modelName;
+          apiStatus = "SUCCESS";
+          break outer;
+        } catch (err: unknown) {
+          if (isQuotaError(err)) {
+            coolDownKey(apiKey);
+            apiStatus = "QUOTA_EXHAUSTED";
+            console.warn({ keyIndex: keyIndex + 1, model: modelName }, "Quota hit");
+            break;
+          } else if (isOverloaded(err)) {
+            console.warn({ keyIndex: keyIndex + 1, model: modelName, attempt }, "Overloaded, retrying");
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
+          } else {
+            console.error({ keyIndex: keyIndex + 1, model: modelName, attempt, err }, "Unknown error");
+            break;
+          }
         }
       }
     }
   }
-}
 
-  if (!raw) {
-    return res.status(503).json({
-      error: "All Gemini API keys and models exhausted. Try again later.",
+  const latencyMs = Date.now() - startTime;
+
+  // ── Log API usage ──────────────────────────────────────────────────────────
+  try {
+    await db.insert(apiUsageLogsTable).values({
+      sessionId: sessionId ?? undefined,
+      modelName: usedModel || "unknown",
+      tier: "PRIMARY",
+      latencyMs,
+      status: apiStatus,
+      errorMsg: apiStatus !== "SUCCESS" ? "All keys/models exhausted" : undefined,
     });
+  } catch (err) {
+    console.warn("Failed to log API usage:", err);
   }
 
-  // Strip accidental markdown fences the model may have added despite instructions
-  const cleaned = raw
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
+  if (!raw) {
+    // Update session to FAILED
+    if (sessionId) {
+      db.update(studySessionsTable)
+        .set({ status: "FAILED" })
+        .where(eq(studySessionsTable.id, sessionId))
+        .catch(() => {});
+    }
+    return res.status(503).json({ error: "All Gemini API keys and models exhausted. Try again later." });
+  }
+
+  // ── Parse + save result ────────────────────────────────────────────────────
+  const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
 
   try {
     const parsed = JSON.parse(cleaned);
+
+    // Save output + mark COMPLETED
+    if (sessionId) {
+      db.update(studySessionsTable)
+        .set({
+          outputText: cleaned,
+          status: "COMPLETED",
+          modelTier: "PRIMARY",
+        })
+        .where(eq(studySessionsTable.id, sessionId))
+        .catch(() => {});
+    }
+
     return res.status(200).json(parsed);
   } catch {
     console.error({ raw }, "Failed to parse Gemini JSON response");
-    return res.status(502).json({
-      error: "Model returned invalid JSON.",
-      raw,
-    });
+
+    if (sessionId) {
+      db.update(studySessionsTable)
+        .set({ status: "FAILED" })
+        .where(eq(studySessionsTable.id, sessionId))
+        .catch(() => {});
+    }
+
+    return res.status(502).json({ error: "Model returned invalid JSON.", raw });
   }
 }
