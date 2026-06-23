@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { addSession, updateSession, getSessions, getLastAnalysis } from "../storage";
 import type { Session } from "../storage";
-import { useSyncToSupabase } from "../hooks/useSupabaseSync";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
@@ -159,16 +159,13 @@ interface Props {
   editSession: Session | null;
   onEditDone: () => void;
   onSessionSaved: (session: Session) => void;
-  userId?: string; // optional userId for Supabase sync
 }
 
-export default function LogScreen({ editSession, onEditDone, onSessionSaved, userId }: Props) {
+export default function LogScreen({ editSession, onEditDone, onSessionSaved }: Props) {
   const [form, setForm] = useState(emptyForm);
   const [saved, setSaved] = useState(false);
   const [activeTooltip, setActiveTooltip] = useState<TooltipData | null>(null);
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const { syncSessions, isSyncing } = useSyncToSupabase();
+  const { saveSession } = useLocalStorage();
   const recentSubjects = getRecentSubjects();
   
   useEffect(() => {
@@ -188,7 +185,7 @@ export default function LogScreen({ editSession, onEditDone, onSessionSaved, use
     setSaved(false);
   }, [editSession]);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (editSession) {
       updateSession({ ...editSession, ...form });
       onEditDone();
@@ -198,24 +195,9 @@ export default function LogScreen({ editSession, onEditDone, onSessionSaved, use
       setForm({ ...emptyForm, date: todayStr() });
       setSaved(true);
       onSessionSaved(session);
-
-      // Auto-sync to Supabase if userId provided
-      if (userId) {
-        setSyncStatus("syncing");
-        setSyncError(null);
-        const allSessions = getSessions();
-        const analysisResult = getLastAnalysis();
-        
-        syncSessions(userId, allSessions, analysisResult).then((result) => {
-          if (result.success) {
-            setSyncStatus("done");
-            setTimeout(() => setSyncStatus("idle"), 2000);
-          } else {
-            setSyncStatus("error");
-            setSyncError(result.error || "Sync failed");
-          }
-        });
-      }
+      
+      // Auto-save to IndexedDB
+      await saveSession(session);
     }
   }
 
@@ -366,21 +348,9 @@ export default function LogScreen({ editSession, onEditDone, onSessionSaved, use
         />
       </div>
 
-   <button onClick={handleSubmit} style={primaryBtn} disabled={isSyncing}>
-        {isSyncing ? "Syncing to Supabase..." : (editSession ? "Save Changes" : (saved ? "✓ Saved" : "Log Session"))}
-         </button>
-
-      {/* Sync status indicator */}
-      {syncStatus === "done" && (
-        <div style={{ marginTop: 12, padding: "10px 12px", background: "rgba(15,217,123,0.15)", border: "1px solid rgba(15,217,123,0.3)", borderRadius: 6, fontSize: 12, color: "#0fd97b", textAlign: "center" }}>
-          ✓ Synced to Supabase
-        </div>
-      )}
-      {syncStatus === "error" && syncError && (
-        <div style={{ marginTop: 12, padding: "10px 12px", background: "rgba(255,100,100,0.15)", border: "1px solid rgba(255,100,100,0.3)", borderRadius: 6, fontSize: 12, color: "#ff6464", textAlign: "center" }}>
-          ✗ Sync failed: {syncError}
-        </div>
-      )}
+      <button onClick={handleSubmit} style={primaryBtn}>
+        {editSession ? "Save Changes" : (saved ? "✓ Saved" : "Log Session")}
+      </button>
 
       {editSession && (
         <button onClick={onEditDone} style={cancelBtn}>Cancel</button>
