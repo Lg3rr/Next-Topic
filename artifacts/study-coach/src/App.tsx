@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import LogScreen from "./screens/LogScreen";
 import HistoryScreen from "./screens/HistoryScreen";
 import AnalysisScreen from "./screens/AnalysisScreen";
 import InterviewScreen from "./screens/InterviewScreen";
+import { useLocalStorage } from "./hooks/useLocalStorage";
 import type { Session } from "./storage";
 
 const TABS = ["log", "history", "analysis"] as const;
@@ -12,6 +13,19 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("log");
   const [editSession, setEditSession] = useState<Session | null>(null);
   const [interviewSession, setInterviewSession] = useState<Session | null>(null);
+  const { isReady } = useLocalStorage();
+
+  useEffect(() => {
+    // IndexedDB initializes on mount
+  }, []);
+
+  if (!isReady) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#061214", color: "#ECFDF5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div>Loading...</div>
+      </div>
+    );
+  }
 
   function handleSessionSaved(session: Session) {
     setInterviewSession(session);
