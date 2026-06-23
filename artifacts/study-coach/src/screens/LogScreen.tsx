@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { addSession, updateSession, getSessions } from "../storage";
+import { addSession, updateSession, getSessions, getLastAnalysis } from "../storage";
 import type { Session } from "../storage";
+import { useSyncToSupabase } from "../hooks/useSupabaseSync";
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
