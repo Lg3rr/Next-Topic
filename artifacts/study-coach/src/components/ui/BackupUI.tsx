@@ -68,6 +68,7 @@ export function BackupUI({ onImportSuccess, onImportError }: BackupUIProps) {
           type: "success",
           text: `✓ Imported ${result.imported} session(s) successfully`,
         });
+        setTimeout(() => window.location.reload(), 1500);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
