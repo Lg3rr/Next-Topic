@@ -19,12 +19,43 @@ export function BackupUI({ onImportSuccess, onImportError }: BackupUIProps) {
     try {
       const backup = await localStorageManager.exportBackup();
       const json = JSON.stringify(backup, null, 2);
+      const filename = `study-coach-backup-${new Date().toISOString().split("T")[0]}.json`;
       const blob = new Blob([json], { type: "application/json" });
+
+      // Try native Web Share API first (works in Median WebView + mobile browsers)
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], filename, { type: "application/json" });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: "Study Coach Backup",
+              text: `Backup with ${backup.metadata.totalSessions} session(s)`,
+            });
+            setMessage({
+              type: "success",
+              text: `✓ Exported ${backup.metadata.totalSessions} session(s)`,
+            });
+            setExporting(false);
+            return;
+          } catch (shareErr) {
+            // User cancelled share, or share failed — fall through to download
+            if (shareErr instanceof Error && shareErr.name === "AbortError") {
+              setExporting(false);
+              return; // User cancelled, don't show error
+            }
+          }
+        }
+      }
+
+      // Fallback: standard browser download
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `study-coach-backup-${new Date().toISOString().split("T")[0]}.json`;
+      link.download = filename;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
       setMessage({
