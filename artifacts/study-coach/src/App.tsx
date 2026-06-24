@@ -15,22 +15,22 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("log");
   const [editSession, setEditSession] = useState<Session | null>(null);
   const [interviewSession, setInterviewSession] = useState<Session | null>(null);
-  const { isReady } = useLocalStorage();
+  const { isReady, saveSession } = useLocalStorage();  // ← FIXED
 
   useEffect(() => {
-  const migrate = async () => {
-    const oldSessions = getSessions();
-    
-    if (oldSessions.length > 0) {
-      for (const session of oldSessions) {
-        await saveSession(session);
+    const migrate = async () => {
+      const oldSessions = getSessions();
+      
+      if (oldSessions.length > 0) {
+        for (const session of oldSessions) {
+          await saveSession(session);
+        }
+        console.log(`✅ Migrated ${oldSessions.length} sessions to IndexedDB`);
       }
-      console.log(`✅ Migrated ${oldSessions.length} sessions to IndexedDB`);
-    }
-  };
+    };
 
-  migrate();
-}, [saveSession]);
+    migrate();
+  }, [saveSession]);
   
 
   if (!isReady) {
