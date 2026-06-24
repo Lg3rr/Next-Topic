@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { localStorageManager, type BackupFile } from "../lib/localStorageManager";
+import { localStorageManager, type BackupFile } from "../../lib/localStorageManager";
 import type { Session, AnalysisResult } from "../storage";
 
 /**
