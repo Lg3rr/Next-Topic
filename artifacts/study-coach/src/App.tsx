@@ -27,7 +27,7 @@ export default function App() {
     });
     console.log(`✅ Migrated ${oldSessions.length} sessions to IndexedDB`);
   }
-}, []);
+}, [saveSession]);
   
 
   if (!isReady) {
