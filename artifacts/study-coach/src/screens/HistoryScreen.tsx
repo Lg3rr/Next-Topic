@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getSessions, clearSessions, deleteSession } from "../storage";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { Session } from "../storage";
 
 interface Props {
@@ -24,12 +25,22 @@ function groupByDate(sessions: Session[]): { date: string; items: Session[] }[] 
 }
 
 export default function HistoryScreen({ onEdit }: Props) {
-  const [sessions, setSessions] = useState<Session[]>(() => [...getSessions()].reverse());
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const { getAllSessions, deleteSession: deleteFromIndexedDB } = useLocalStorage();
+
+  // Load sessions from IndexedDB on mount
+  useEffect(() => {
+    getAllSessions().then((allSessions) => {
+      setSessions([...allSessions].reverse());
+    });
+  }, [getAllSessions]);
 
   function handleDelete(id: string) {
     if (window.confirm("Delete this session?")) {
-      deleteSession(id);
-      setSessions((prev) => prev.filter((s) => s.id !== id));
+      deleteFromIndexedDB(id).then(() => {
+        deleteSession(id); // also delete from localStorage for sync
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+      });
     }
   }
 
