@@ -1,3 +1,4 @@
+import { BackupUI } from "./components/BackupUI";
 import { useState, useEffect } from "react";
 import LogScreen from "./screens/LogScreen";
 import HistoryScreen from "./screens/HistoryScreen";
@@ -6,7 +7,7 @@ import InterviewScreen from "./screens/InterviewScreen";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import type { Session } from "./storage";
 
-const TABS = ["log", "history", "analysis"] as const;
+const TABS = ["log", "history", "analysis", "backup"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function App() {
@@ -68,7 +69,8 @@ export default function App() {
           ? <InterviewScreen session={interviewSession} onDone={handleInterviewDone} />
           : tab === "log"      ? <LogScreen editSession={editSession} onEditDone={handleEditDone} onSessionSaved={handleSessionSaved} />
           : tab === "history"  ? <HistoryScreen onEdit={handleEdit} />
-          : <AnalysisScreen />
+          : tab === "analysis" ? <AnalysisScreen />
+          : <div style={{ padding: "24px" }}><BackupUI /></div>
         }
       </div>
 
