@@ -1,4 +1,4 @@
-import { BackupUI } from "./components/BackupUI";
+import { BackupUI } from "./components/ui/BackupUI";
 import { useState, useEffect } from "react";
 import LogScreen from "./screens/LogScreen";
 import HistoryScreen from "./screens/HistoryScreen";
