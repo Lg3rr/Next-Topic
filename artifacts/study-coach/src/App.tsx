@@ -5,6 +5,7 @@ import AnalysisScreen from "./screens/AnalysisScreen";
 import InterviewScreen from "./screens/InterviewScreen";
 import { BackupUI } from "./components/ui/BackupUI";
 import { useLocalStorage } from "./hooks/useLocalStorage";
+import { getSessions } from "./storage";
 import type { Session } from "./storage";
 
 const TABS = ["log", "history", "analysis", "backup"] as const;
