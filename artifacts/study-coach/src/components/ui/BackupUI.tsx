@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { localStorageManager } from "../lib/localStorageManager";
+import { localStorageManager } from "../../lib/localStorageManager";
 
 interface BackupUIProps {
   onImportSuccess?: (count: number) => void;
