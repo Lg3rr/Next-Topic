@@ -17,8 +17,17 @@ export default function App() {
   const { isReady } = useLocalStorage();
 
   useEffect(() => {
-    // IndexedDB initializes on mount
-  }, []);
+  const { saveSession } = useLocalStorage();
+  const oldSessions = getSessions(); // Get from localStorage
+  
+  if (oldSessions.length > 0) {
+    oldSessions.forEach((session) => {
+      saveSession(session); // Save to IndexedDB
+    });
+    console.log(`✅ Migrated ${oldSessions.length} sessions to IndexedDB`);
+  }
+}, []);
+  
 
   if (!isReady) {
     return (
