@@ -7,6 +7,10 @@ export interface Session {
   focus: number;
   retention: number;
   notes: string;
+
+  interviewContext?: string;
+  sessionType?: string;
+
 }
 
 export interface AnalysisResult {

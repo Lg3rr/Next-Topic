@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { getSessions, saveLastAnalysis } from "../storage";
-import { analyzeStudy } from "../api";
+import { updateSession } from "../storage";
 import type { Session } from "../storage";
 
 const font = "'Inter', 'Roboto', system-ui, sans-serif";
@@ -84,53 +83,44 @@ interface Props {
 }
 
 export default function InterviewScreen({ session, onDone }: Props) {
-  const [step, setStep] = useState<"type" | "questions" | "loading">("type");
+  const [step, setStep] = useState<"type" | "questions">("type");
   const [sessionType, setSessionType] = useState<SessionType | null>(null);
   const [q1, setQ1] = useState("");
   const [q2, setQ2] = useState("");
   const [q3, setQ3] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  async function runAnalysis(interviewContext?: string) {
-    setStep("loading");
-    setError(null);
-    try {
-      const sessions = getSessions();
-      const result = await analyzeStudy(sessions, interviewContext);
-      saveLastAnalysis(result);
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Analysis failed");
-      setStep("questions");
-    }
-  }
+ function handleSkip() {
+  onDone();
+}
 
-  function handleSkip() {
-    runAnalysis(undefined);
-  }
-
-  function handleSubmit() {
+ function handleSubmit() {
   if (!sessionType) return;
+
   const q = QUESTIONS[sessionType];
+
   const parts: string[] = [`Session type: ${sessionType}`];
+
   parts.push(`${q.q1} → ${q1 || "Skipped"}`);
+
   if (q.q2) {
     parts.push(`${q.q2} → ${q2 || "Skipped"}`);
   }
+
   if (q.q3) {
     parts.push(`${q.q3} → ${q3 || "Skipped"}`);
   }
-  runAnalysis(parts.join("\n"));
-  }
 
-  if (step === "loading") {
-    return (
-      <div style={{ padding: "60px 20px", textAlign: "center", fontFamily: font }}>
-        <div style={{ fontSize: 14, color: "#555", marginBottom: 8 }}>Analyzing your session…</div>
-        <div style={{ fontSize: 12, color: "#333" }}>This takes a few seconds</div>
-      </div>
-    );
-  }
+  updateSession({
+    ...session,
+    sessionType,
+    interviewContext: parts.join("\n"),
+  });
+
+  onDone();
+} 
+ 
+
 
   if (step === "type") {
     return (
