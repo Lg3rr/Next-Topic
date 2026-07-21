@@ -1,18 +1,35 @@
-import { useState } from "react";
-import { getSessions, getLastAnalysis, saveLastAnalysis, type AnalysisResult, type Session } from "../storage";
-import { analyzeStudy } from "../api";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  getSessions,
+  getLastAnalysis,
+  saveLastAnalysis,
+  getAISummary,
+  saveAISummary,
+  getCooldown,
+  setCooldown,
+  clearCooldown,
+  getAdvancedInsights,
+  saveAdvancedInsights,
+  type AnalysisResult,
+  type Session,
+  type AISummary,
+  type AdvancedInsights,
+} from "../storage";
+import { analyzeStudy, type AnalyzeResponse } from "../api";
+import { color } from "../theme";
 
 const STATUS_COLOR: Record<string, string> = {
-  LOCKED_IN:    "#00ff87",
-  INCONSISTENT: "#ffb800",
-  STRUGGLING:   "#ff4d6d",
+  LOCKED_IN:    color.accentBright,
+  INCONSISTENT: color.amber,
+  STRUGGLING:   color.red,
   COASTING:     "#a78bfa",
 };
 
 const PRIORITY_COLOR: Record<string, string> = {
-  HIGH:   "#ff4d6d",
-  MEDIUM: "#ffb800",
-  LOW:    "#555",
+  HIGH:   color.red,
+  MEDIUM: color.amber,
+  LOW:    color.textMuted,
 };
 
 const font = "'Inter', 'Roboto', system-ui, sans-serif";
@@ -49,33 +66,173 @@ function computeStats(sessions: Session[]): SubjectStat[] {
     .sort((a, b) => b.hours - a.hours);
 }
 
+function normalizeStatus(raw: string): string {
+  return raw?.trim().toUpperCase().replace(/\s+/g, "_") ?? "INCONSISTENT";
+}
+
 export default function AnalysisScreen() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(() => getLastAnalysis());
+  const [insights, setInsights] = useState<AdvancedInsights | null>(() => getAdvancedInsights());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionCount, setSessionCount] = useState(() => getSessions().length);
+  const [cooldownMs, setCooldownMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    const cooldown = getCooldown();
+    if (cooldown) {
+      const remaining = Math.max(0, cooldown.endsAt - Date.now());
+      if (remaining > 0) {
+        setCooldownMs(remaining);
+        const interval = setInterval(() => {
+          setCooldownMs((prev) => {
+            if (!prev || prev <= 0) {
+              clearInterval(interval);
+              clearCooldown();
+              return null;
+            }
+            return prev - 1000;
+          });
+        }, 1000);
+        return () => clearInterval(interval);
+      } else {
+        clearCooldown();
+      }
+    }
+    return undefined;
+  }, []);
 
   async function handleAnalyze() {
+    console.log("[ANALYZE] Button pressed");
+    console.log("[ANALYZE] loading:", loading, "cooldownMs:", cooldownMs);
+    
+    if (loading || cooldownMs) {
+      console.log("[ANALYZE] Early return: loading=" + loading + ", cooldownMs=" + cooldownMs);
+      return;
+    }
+
+    console.log("[ANALYZE] Starting analysis...");
     setLoading(true);
+    console.log("[ANALYZE] setLoading(true) called");
+    
     setError(null);
+    console.log("[ANALYZE] setError(null) called");
+    
     try {
+      console.log("[ANALYZE] Inside try block");
+      
       const sessions = getSessions();
+      console.log("[ANALYZE] getSessions() returned:", sessions.length, "sessions");
+      
       if (sessions.length === 0) {
+        console.log("[ANALYZE] VALIDATION: No sessions - setting error and returning");
         setError("No sessions logged yet. Add some study sessions first.");
         setLoading(false);
+        console.log("[ANALYZE] setLoading(false) called (no sessions path)");
         return;
       }
+      
+      console.log("[ANALYZE] Validation passed - sessions exist");
       setSessionCount(sessions.length);
-      const result = await analyzeStudy(sessions);
-      saveLastAnalysis(result);
-      setAnalysis(result);
+      console.log("[ANALYZE] setSessionCount called");
+      
+      const aiSummary = getAISummary();
+      console.log("[ANALYZE] getAISummary() returned:", aiSummary);
+      
+      console.log("[ANALYZE] About to call analyzeStudy()");
+      console.log("[ANALYZE] Request payload: sessions count =", sessions.length, ", aiSummary =", aiSummary);
+      
+      const response = await analyzeStudy(sessions, undefined, aiSummary);
+      
+      console.log("[ANALYZE] analyzeStudy() completed successfully");
+      console.log("[ANALYZE] Response received:", response);
+
+      if (!response.analysis) {
+        throw new Error("Invalid response from server: Missing analysis data");
+      }
+
+      // Normalize response shape if backend sends old keys or misses fields
+      const normalizedAnalysis: AnalysisResult = {
+        status: response.analysis.status || "INCONSISTENT",
+        performance_level: response.analysis.performance_level ?? (response.analysis as any).level ?? 5,
+        one_liner: response.analysis.one_liner || "Analysis complete.",
+        status_reason: response.analysis.status_reason || "Based on your recent study patterns.",
+        current_state: response.analysis.current_state || "Active study period.",
+        progress_notes: response.analysis.progress_notes || [],
+        patterns: response.analysis.patterns || [],
+        callouts: response.analysis.callouts || [],
+        key_blocker: response.analysis.key_blocker || "None identified.",
+        improvement_points: response.analysis.improvement_points || [],
+        weak_subjects: response.analysis.weak_subjects || [],
+        next_action_plan: response.analysis.next_action_plan ?? (response.analysis as any).tomorrow_plan?.map((p: any) => ({
+          subject: p.subject,
+          task: p.task || p.focus_tip,
+          reason: p.reason || `Priority: ${p.priority}`
+        })) ?? []
+      };
+      
+      saveLastAnalysis(normalizedAnalysis);
+      setAnalysis(normalizedAnalysis);
+      
+      if (response.insights) {
+        console.log("[ANALYZE] Insights exist, saving...");
+        saveAdvancedInsights(response.insights);
+        console.log("[ANALYZE] saveAdvancedInsights() called");
+        
+        setInsights(response.insights);
+        console.log("[ANALYZE] setInsights() called");
+      } else {
+        console.log("[ANALYZE] No insights in response");
+      }
+
+      const newSummary: AISummary = {
+        timestamp: Date.now(),
+        longTermTrends: response.analysis.progress_notes.join("; "),
+        strengths: response.analysis.patterns || [],
+        weaknesses: response.analysis.callouts || [],
+        recurringIssues: response.analysis.callouts || [],
+        habits: response.analysis.current_state || "",
+        recommendations: response.analysis.improvement_points || [],
+      };
+      console.log("[ANALYZE] Created newSummary:", newSummary);
+      
+      saveAISummary(newSummary);
+      console.log("[ANALYZE] saveAISummary() called");
+      
+      setLoading(false);
+      console.log("[ANALYZE] setLoading(false) called (success path)");
+      console.log("[ANALYZE] ✅ Analysis completed successfully");
+      
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      console.error("[ANALYZE] ❌ EXCEPTION CAUGHT");
+      console.error("[ANALYZE] Error type:", typeof e);
+      console.error("[ANALYZE] Error instanceof Error:", e instanceof Error);
+      console.error("[ANALYZE] Error object:", e);
+      
+      if (e instanceof Error) {
+        console.error("[ANALYZE] Error.message:", e.message);
+        console.error("[ANALYZE] Error.stack:", e.stack);
+      }
+      
+      const errorMsg = e instanceof Error ? e.message : "Unknown error";
+      setError(errorMsg);
+      
+      // Only set cooldown for server errors (5xx) or rate limits, not for client-side or validation errors
+      const isServerError = errorMsg.includes("500") || errorMsg.includes("503") || errorMsg.includes("Server error");
+      const isRateLimit = errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("limit");
+      
+      if (isServerError || isRateLimit || errorMsg === "Unknown error") {
+        setCooldown(Date.now() + 10 * 60 * 1000);
+        setCooldownMs(10 * 60 * 1000);
+      }
+      
+      setLoading(false);
+      console.log("[ANALYZE] setLoading(false) called (catch path)");
     }
-    setLoading(false);
   }
 
-  const color = analysis ? (STATUS_COLOR[analysis.status] ?? "#fff") : "#fff";
+  const status = analysis ? normalizeStatus(analysis.status) : "";
+  const statusColor = STATUS_COLOR[status] ?? "#fff";
   const allSessions = getSessions();
   const stats = computeStats(allSessions);
 
@@ -88,36 +245,58 @@ export default function AnalysisScreen() {
 
       {/* Run button + session badge */}
       <div style={{ marginBottom: 4 }}>
-        <button onClick={handleAnalyze} disabled={loading} style={analyzeBtn(loading)}>
-          {loading ? "Analyzing your sessions..." : "Run Analysis"}
-        </button>
+        <motion.button
+          onClick={handleAnalyze}
+          disabled={loading || !!cooldownMs}
+          whileTap={{ scale: 0.98 }}
+          style={analyzeBtn(loading || !!cooldownMs)}
+        >
+          {cooldownMs
+            ? `Cooldown: ${Math.ceil(cooldownMs / 1000)}s`
+            : loading
+              ? "Analyzing your sessions..."
+              : "Run Analysis"}
+        </motion.button>
         {sessionCount > 0 && (
-          <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#3a3a3a" }}>
+          <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: color.textFaint }}>
             Analysis based on {sessionCount} session{sessionCount !== 1 ? "s" : ""}
           </div>
         )}
       </div>
 
       {error && (
-        <div style={{ color: "#ff4d6d", fontSize: 13, marginTop: 12, lineHeight: 1.5 }}>{error}</div>
+        <div style={{ color: color.red, fontSize: 13, marginTop: 12, lineHeight: 1.5 }}>
+          {error}
+          {cooldownMs && (
+            <div style={{ marginTop: 8, fontSize: 12, color: color.amber }}>
+              Please try again after the cooldown expires.
+            </div>
+          )}
+        </div>
       )}
 
       {!analysis && !loading && !error && (
         <div style={{ marginTop: 48, textAlign: "center" }}>
-          <div style={{ fontSize: 14, color: "#444" }}>Log sessions to get your analysis</div>
+          <div style={{ fontSize: 14, color: color.textFaint }}>Log sessions to get your analysis</div>
         </div>
       )}
 
+      <AnimatePresence>
       {analysis && !loading && (
-        <div style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 16 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 16 }}
+        >
 
           {/* Status block */}
-          <div style={{ ...section, borderColor: color + "30", background: color + "0a", textAlign: "center", padding: "24px 20px" }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color, letterSpacing: 1, marginBottom: 4 }}>
-              {analysis.status}
+          <div style={{ ...section, borderColor: statusColor + "30", background: statusColor + "0a", textAlign: "center", padding: "24px 20px" }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: statusColor, letterSpacing: 1, marginBottom: 4 }}>
+              {status}
             </div>
-            <div style={{ fontSize: 32, fontWeight: 700, color, marginBottom: 10 }}>
-              {analysis.level}<span style={{ fontSize: 16, color: color + "80", fontWeight: 400 }}>/10</span>
+            <div style={{ fontSize: 32, fontWeight: 700, color: statusColor, marginBottom: 10 }}>
+              {analysis.performance_level}<span style={{ fontSize: 16, color: statusColor + "80", fontWeight: 400 }}>/10</span>
             </div>
             <div style={{ fontSize: 13, color: "#aaa", lineHeight: 1.6 }}>
               {analysis.status_reason}
@@ -148,55 +327,84 @@ export default function AnalysisScreen() {
           )}
 
           {/* How to Improve */}
-          {analysis.improvement_points?.length > 0 && (
+          {(analysis.improvement_points?.length ?? 0) > 0 && (
             <div style={section}>
               <SectionTitle>How to Improve</SectionTitle>
-              {analysis.improvement_points.map((p, i) => <Bullet key={i} color="#00ff87" text={p} />)}
+              {analysis.improvement_points!.map((p, i) => <Bullet key={i} color="#00ff87" text={p} />)}
             </div>
           )}
 
           {/* Weak Subjects */}
-          {analysis.weak_subjects?.length > 0 && (
+          {(analysis.weak_subjects?.length ?? 0) > 0 && (
             <div style={section}>
               <SectionTitle>Weak Subjects</SectionTitle>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
-                {analysis.weak_subjects.map((s) => <span key={s} style={pill}>{s}</span>)}
+                {analysis.weak_subjects!.map((s) => <span key={s} style={pill}>{s}</span>)}
               </div>
             </div>
           )}
 
-          {/* Tomorrow's Plan */}
-          {analysis.tomorrow_plan?.length > 0 && (
+          {/* Advanced Insights */}
+          {insights && insights.patterns?.length > 0 && (
             <div style={section}>
-              <SectionTitle>Tomorrow's Plan</SectionTitle>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
-                {analysis.tomorrow_plan.map((t, i) => (
-                  <div key={i} style={planCard}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{t.subject}</span>
-                        <span style={{ fontSize: 12, color: "#666" }}>{t.duration_minutes}min</span>
-                      </div>
-                      <span style={{
-                        fontSize: 10, fontWeight: 600,
-                        color: PRIORITY_COLOR[t.priority] ?? "#555",
-                        letterSpacing: 0.5,
-                        padding: "2px 8px",
-                        border: `1px solid ${PRIORITY_COLOR[t.priority] ?? "#555"}40`,
-                        borderRadius: 4,
-                      }}>
-                        {t.priority}
-                      </span>
+              <SectionTitle>Pattern Detection</SectionTitle>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {insights.patterns.map((p, i) => (
+                  <div key={i} style={{ fontSize: 12, borderLeft: `3px solid ${p.confidence === "High" ? color.accentBright : color.amber}`, paddingLeft: 10, color: "#aaa" }}>
+                    <div style={{ fontWeight: 600, marginBottom: 2, color: "#fff" }}>
+                      {p.label} <span style={{ fontSize: 10, color: "#666", fontWeight: 400 }}>({p.confidence})</span>
                     </div>
-                    <div style={{ fontSize: 12, color: "#666", lineHeight: 1.6 }}>{t.focus_tip}</div>
+                    <div style={{ fontSize: 11, color: "#888" }}>{p.explanation}</div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
+          {/* Personalized Recommendations */}
+          {insights && insights.recommendations?.length > 0 && (
+            <div style={section}>
+              <SectionTitle>Action Items</SectionTitle>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {insights.recommendations.map((r, i) => (
+                  <div key={i} style={{ fontSize: 12, paddingLeft: 10, borderLeft: `3px solid ${PRIORITY_COLOR[r.priority]}`, color: "#aaa" }}>
+                    <div style={{ fontWeight: 600, marginBottom: 2, color: PRIORITY_COLOR[r.priority] }}>
+                      {r.action}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>{r.rationale}</div>
+                    {r.baselineData && <div style={{ fontSize: 10, color: "#555" }}>{r.baselineData}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* nExt action */}
+          
+          {analysis.next_action_plan?.length > 0 && (
+  <div style={section}>
+    <SectionTitle>What to Study Next</SectionTitle>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+      {analysis.next_action_plan.map((t, i) => (
+        <div key={i} style={planCard}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 6 }}>
+            {t.subject}
+          </div>
+          <div style={{ fontSize: 13, color: "#aaa", lineHeight: 1.6, marginBottom: 6 }}>
+            {t.task}
+          </div>
+          <div style={{ fontSize: 11, color: "#555", lineHeight: 1.5 }}>
+            {t.reason}
+          </div>
         </div>
+      ))}
+    </div>
+  </div>
+)}
+
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Subject Statistics */}
       {stats.length > 0 && (
@@ -276,35 +484,35 @@ function Bullet({ color, text }: { color: string; text: string }) {
 
 const section: React.CSSProperties = {
   padding: "16px",
-  background: "rgba(255,255,255,0.02)",
-  border: "1px solid rgba(255,255,255,0.07)",
-  borderRadius: 10,
+  background: color.bgCard,
+  border: `1px solid ${color.border}`,
+  borderRadius: 14,
 };
 
 const pill: React.CSSProperties = {
   padding: "4px 12px",
-  borderRadius: 20,
-  border: "1px solid rgba(255,107,53,0.3)",
+  borderRadius: 999,
+  border: "1px solid rgba(250,204,21,0.35)",
   fontSize: 12,
-  color: "#ff6b35",
+  color: color.amber,
   fontFamily: font,
 };
 
 const planCard: React.CSSProperties = {
   padding: "12px 14px",
-  background: "rgba(255,255,255,0.02)",
-  border: "1px solid rgba(255,255,255,0.07)",
-  borderRadius: 8,
+  background: color.bgCardAlt,
+  border: `1px solid ${color.border}`,
+  borderRadius: 10,
 };
 
 function analyzeBtn(loading: boolean): React.CSSProperties {
   return {
     width: "100%",
     padding: "15px 0",
-    background: loading ? "transparent" : "rgba(167,139,250,0.1)",
+    background: loading ? "transparent" : "rgba(167,139,250,0.12)",
     border: "1px solid",
-    borderColor: loading ? "rgba(255,255,255,0.06)" : "rgba(167,139,250,0.3)",
-    color: loading ? "#444" : "#a78bfa",
+    borderColor: loading ? color.border : "rgba(167,139,250,0.35)",
+    color: loading ? color.textFaint : "#a78bfa",
     fontSize: 14,
     fontWeight: 600,
     cursor: loading ? "not-allowed" : "pointer",
@@ -312,4 +520,4 @@ function analyzeBtn(loading: boolean): React.CSSProperties {
     fontFamily: font,
     letterSpacing: 0.3,
   };
-}
+                 }

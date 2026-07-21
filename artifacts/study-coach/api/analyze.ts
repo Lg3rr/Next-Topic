@@ -44,8 +44,115 @@ type Session = {
   notes: string;
 };
 
+function generateAdvancedInsights(sessions: Session[]) {
+  const patterns: any[] = [];
+  const recommendations: any[] = [];
+
+  if (!sessions || sessions.length === 0) {
+    return { patterns, recommendations, timestamp: Date.now() };
+  }
+
+  const subjectStats: Record<string, { focus: number[]; retention: number[]; count: number }> = {};
+  sessions.forEach((s) => {
+    if (!subjectStats[s.subject]) subjectStats[s.subject] = { focus: [], retention: [], count: 0 };
+    subjectStats[s.subject].focus.push(s.focus);
+    subjectStats[s.subject].retention.push(s.retention);
+    subjectStats[s.subject].count += 1;
+  });
+
+  const subjectPerf = Object.entries(subjectStats)
+    .map(([s, d]) => ({
+      subject: s,
+      avgFocus: d.focus.reduce((a, b) => a + b, 0) / d.focus.length,
+      avgRetention: d.retention.reduce((a, b) => a + b, 0) / d.retention.length,
+      count: d.count,
+    }))
+    .sort((a, b) => b.avgRetention - a.avgRetention);
+
+  const weak = subjectPerf.filter((p) => p.avgRetention < 3);
+  weak.forEach((w) => {
+    patterns.push({
+      type: "weak_subject",
+      label: `${w.subject} needs attention`,
+      value: w.avgRetention.toFixed(1),
+      confidence: w.count >= 3 ? "High" : "Medium",
+      explanation: `${w.subject} shows retention of ${w.avgRetention.toFixed(1)}/5 across ${w.count} session(s).`,
+    });
+    recommendations.push({
+      priority: "HIGH",
+      action: `Schedule focused revision for ${w.subject}`,
+      rationale: "Retention is low; needs spaced repetition and active recall.",
+      baselineData: `${w.count} session(s), avg retention ${w.avgRetention.toFixed(1)}`,
+    });
+  });
+
+  if (subjectPerf.length > 0 && subjectPerf[0].avgRetention >= 4) {
+    const strong = subjectPerf[0];
+    patterns.push({
+      type: "strong_subject",
+      label: `${strong.subject} is solid`,
+      value: strong.avgRetention.toFixed(1),
+      confidence: "High",
+      explanation: `Consistent high retention and focus in ${strong.subject}.`,
+    });
+  }
+
+  const focusTrend = sessions.slice(-3).map((s) => s.focus).reduce((a, b) => a + b, 0) / Math.min(3, sessions.length);
+  const focusPrev = sessions.slice(Math.max(0, sessions.length - 6), Math.max(0, sessions.length - 3));
+  if (focusPrev.length > 0) {
+    const prevFocus = focusPrev.map((s) => s.focus).reduce((a, b) => a + b, 0) / focusPrev.length;
+    if (focusTrend < prevFocus - 1) {
+      patterns.push({
+        type: "focus_trend",
+        label: "Focus is declining",
+        value: focusTrend.toFixed(1),
+        confidence: focusPrev.length >= 3 ? "High" : "Medium",
+        explanation: `Recent sessions show focus dropping from ${prevFocus.toFixed(1)} to ${focusTrend.toFixed(1)}.`,
+      });
+      recommendations.push({
+        priority: "MEDIUM",
+        action: "Take longer breaks or reduce session length",
+        rationale: "Declining focus suggests fatigue or distraction buildup.",
+        baselineData: `Focus: ${focusTrend.toFixed(1)}/5 (recent) vs ${prevFocus.toFixed(1)}/5 (previous)`,
+      });
+    }
+  }
+
+  const studyDays = new Set(sessions.map((s) => s.date.split("T")[0])).size;
+  if (studyDays <= 1) {
+    patterns.push({
+      type: "consistency",
+      label: "Study frequency is low",
+      value: studyDays,
+      confidence: "High",
+      explanation: `Only ${studyDays} study day(s) in recent history.`,
+    });
+    recommendations.push({
+      priority: "MEDIUM",
+      action: "Build consistent daily study habit",
+      rationale: "Regular, shorter sessions beat sporadic long ones.",
+      baselineData: `${studyDays} active study day(s)`,
+    });
+  }
+
+  if (sessions.length > 10) {
+    const daysActive = new Set(sessions.map((s) => s.date.split("T")[0])).size;
+    const maxDays = Math.ceil(sessions.length / 2);
+    if (daysActive < maxDays * 0.6) {
+      patterns.push({
+        type: "skipped_days",
+        label: "Irregular study pattern",
+        value: daysActive,
+        confidence: "Medium",
+        explanation: `Active ${daysActive} days with possible gaps in between.`,
+      });
+    }
+  }
+
+  return { patterns, recommendations, timestamp: Date.now() };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS preflight
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -59,7 +166,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { sessions, interviewContext } = req.body;
+    const { sessions, allSessions, interviewContext } = req.body;
 
     if (!Array.isArray(sessions)) {
       return res.status(400).json({ error: "sessions must be an array" });
@@ -133,18 +240,20 @@ OUTPUT FORMAT (strict JSON only, no markdown, no code fences):
 
 {
   "status": "LOCKED_IN | INCONSISTENT | STRUGGLING | COASTING",
-  "level": 1-10,
+  "performance_level": 1-10,
   "status_reason": "one clear sentence",
+  "current_state": "one clear sentence describing current habits",
+  "progress_notes": ["string", "string"],
   "patterns": ["string", "string", "string"],
   "callouts": ["string", "string"],
+  "key_blocker": "the single biggest thing stopping progress",
   "weak_subjects": ["string"],
   "improvement_points": ["string"],
-  "tomorrow_plan": [
+  "next_action_plan": [
     {
       "subject": "string",
-      "duration_minutes": number,
-      "priority": "HIGH | MEDIUM | LOW",
-      "focus_tip": "how to study this properly in one sentence"
+      "task": "string",
+      "reason": "string"
     }
   ],
   "one_liner": "direct but respectful summary of current performance"
@@ -200,12 +309,18 @@ ${interviewContext}` : ""}`;
       return res.status(500).json({ error: "Failed to parse analysis response. Please try again." });
     }
 
+    let analysis;
     try {
-      const analysis = JSON.parse(jsonMatch[0]);
-      return res.status(200).json(analysis);
+      analysis = JSON.parse(jsonMatch[0]);
     } catch {
-      return res.status(500).json({ error: "Failed to parse analysis response. Please try again." });
+      console.error("Gemini returned invalid JSON:", raw);
+      return res.status(500).json({ error: "Gemini returned invalid JSON." });
     }
+
+    const insightsData = Array.isArray(allSessions) ? allSessions : sessions;
+    const insights = generateAdvancedInsights(insightsData);
+
+    return res.status(200).json({ analysis, insights });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unexpected error";
     console.error("Analyze route error:", err);

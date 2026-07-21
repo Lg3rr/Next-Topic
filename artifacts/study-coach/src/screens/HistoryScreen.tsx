@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { getSessions, clearSessions, deleteSession } from "../storage";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { Session } from "../storage";
+import { color, font } from "../theme";
 
 interface Props {
   onEdit: (session: Session) => void;
@@ -9,6 +12,13 @@ interface Props {
 function formatDateHeader(dateStr: string): string {
   const [year, month, day] = dateStr.split("-").map(Number);
   const date = new Date(year, month - 1, day);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  const isSameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (isSameDay(date, today)) return "Today";
+  if (isSameDay(date, yesterday)) return "Yesterday";
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -24,12 +34,25 @@ function groupByDate(sessions: Session[]): { date: string; items: Session[] }[] 
 }
 
 export default function HistoryScreen({ onEdit }: Props) {
-  const [sessions, setSessions] = useState<Session[]>(() => [...getSessions()].reverse());
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const { getAllSessions, deleteSession: deleteFromIndexedDB } = useLocalStorage();
+
+  useEffect(() => {
+    getAllSessions().then((allSessions) => {
+      const sorted = sortOrder === "newest" 
+        ? [...allSessions].reverse()
+        : [...allSessions];
+      setSessions(sorted);
+    });
+  }, [sortOrder]);
 
   function handleDelete(id: string) {
     if (window.confirm("Delete this session?")) {
-      deleteSession(id);
-      setSessions((prev) => prev.filter((s) => s.id !== id));
+      deleteFromIndexedDB(id).then(() => {
+        deleteSession(id);
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+      });
     }
   }
 
@@ -42,9 +65,9 @@ export default function HistoryScreen({ onEdit }: Props) {
 
   if (sessions.length === 0) {
     return (
-      <div style={{ padding: "48px 20px", textAlign: "center", fontFamily: "'Inter', 'Roboto', system-ui, sans-serif" }}>
-        <div style={{ fontSize: 15, color: "#888", marginBottom: 6 }}>No sessions logged yet</div>
-        <div style={{ fontSize: 13, color: "#444" }}>Start logging to see your history</div>
+      <div style={{ padding: "48px 20px", textAlign: "center", fontFamily: font }}>
+        <div style={{ fontSize: 15, color: color.textSecondary, marginBottom: 6 }}>No sessions logged yet</div>
+        <div style={{ fontSize: 13, color: color.textMuted }}>Start logging to see your history</div>
       </div>
     );
   }
@@ -52,63 +75,94 @@ export default function HistoryScreen({ onEdit }: Props) {
   const groups = groupByDate(sessions);
 
   return (
-    <div style={{ padding: "24px 20px", maxWidth: 480, margin: "0 auto", fontFamily: "'Inter', 'Roboto', system-ui, sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 20 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: "#e0e0e0" }}>History</div>
-        <div style={{ fontSize: 12, color: "#444" }}>{sessions.length} sessions</div>
+    <div style={{ padding: "24px 20px", maxWidth: 480, margin: "0 auto", fontFamily: font }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: color.textPrimary }}>History</div>
+          <div style={{ fontSize: 11, color: color.textMuted, marginTop: 2 }}>{sessions.length} sessions</div>
+        </div>
+        <motion.button
+          onClick={() => setSortOrder(sortOrder === "newest" ? "oldest" : "newest")}
+          whileTap={{ scale: 0.95 }}
+          style={{
+            padding: "8px 14px",
+            background: color.accentDim,
+            border: `1px solid ${color.accentBorder}`,
+            borderRadius: 6,
+            color: color.accent,
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: font,
+            letterSpacing: 0.5,
+          }}
+        >
+          Sort It
+        </motion.button>
+      </div>
+      <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 16, textAlign: "right", letterSpacing: 0.5 }}>
+        {sortOrder === "newest" ? "Newest First" : "Oldest First"}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {groups.map(({ date, items }) => (
           <div key={date}>
-            {/* Date header */}
             <div style={{
               fontSize: 11,
-              fontWeight: 600,
-              color: "#444",
-              letterSpacing: 0.5,
+              fontWeight: 700,
+              color: color.textMuted,
+              letterSpacing: 1,
               textTransform: "uppercase",
               marginBottom: 8,
               paddingBottom: 6,
-              borderBottom: "1px solid rgba(255,255,255,0.05)",
+              borderBottom: `1px solid ${color.border}`,
             }}>
               {formatDateHeader(date)}
             </div>
 
-            {/* Session cards for this date */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {items.map((s) => (
-                <div key={s.id} style={card}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{s.subject}</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 11, color: "#555" }}>{s.duration}min</span>
-                      <button onClick={() => onEdit(s)} title="Edit session" style={editBtn}>✎</button>
-                      <button onClick={() => handleDelete(s.id)} title="Delete session" style={deleteBtn}>✕</button>
+              <AnimatePresence initial={false}>
+                {items.map((s, i) => (
+                  <motion.div
+                    key={s.id}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0, marginBottom: -8 }}
+                    transition={{ duration: 0.2, delay: i * 0.02 }}
+                    style={card}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: color.textPrimary }}>{s.subject}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 11, color: color.textMuted }}>{s.duration}min</span>
+                        <button onClick={() => onEdit(s)} title="Edit session" style={editBtn}>✎</button>
+                        <button onClick={() => handleDelete(s.id)} title="Delete session" style={deleteBtn}>✕</button>
+                      </div>
                     </div>
-                  </div>
 
-                  <div style={{ display: "flex", gap: 16, marginBottom: s.notes ? 10 : 0 }}>
-                    <Metric label="D" value={s.difficulty} />
-                    <Metric label="F" value={s.focus} />
-                    <Metric label="R" value={s.retention} />
-                  </div>
-
-                  {s.notes && (
-                    <div style={{
-                      fontSize: 12,
-                      color: "#555",
-                      lineHeight: 1.5,
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical" as const,
-                      overflow: "hidden",
-                    }}>
-                      {s.notes}
+                    <div style={{ display: "flex", gap: 16, marginBottom: s.notes ? 10 : 0 }}>
+                      <Metric label="D" value={s.difficulty} />
+                      <Metric label="F" value={s.focus} />
+                      <Metric label="R" value={s.retention} />
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {s.notes && (
+                      <div style={{
+                        fontSize: 12,
+                        color: color.textSecondary,
+                        lineHeight: 1.5,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical" as const,
+                        overflow: "hidden",
+                      }}>
+                        {s.notes}
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           </div>
         ))}
@@ -123,23 +177,23 @@ export default function HistoryScreen({ onEdit }: Props) {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div style={{ fontSize: 12, color: "#555" }}>
-      {label}: <span style={{ color: "#aaa", fontWeight: 500 }}>{value}/5</span>
+    <div style={{ fontSize: 12, color: color.textMuted }}>
+      {label}: <span style={{ color: color.textSecondary, fontWeight: 600 }}>{value}/5</span>
     </div>
   );
 }
 
 const card: React.CSSProperties = {
   padding: "14px 16px",
-  background: "rgba(255,255,255,0.03)",
-  border: "1px solid rgba(255,255,255,0.07)",
-  borderRadius: 10,
+  background: color.bgCard,
+  border: `1px solid ${color.border}`,
+  borderRadius: 14,
 };
 
 const editBtn: React.CSSProperties = {
   background: "transparent",
   border: "none",
-  color: "#444",
+  color: color.textMuted,
   fontSize: 13,
   cursor: "pointer",
   padding: "2px 4px",
@@ -152,7 +206,7 @@ const editBtn: React.CSSProperties = {
 const deleteBtn: React.CSSProperties = {
   background: "transparent",
   border: "none",
-  color: "#3a3a3a",
+  color: color.textFaint,
   fontSize: 11,
   cursor: "pointer",
   padding: "2px 4px",
@@ -165,10 +219,10 @@ const deleteBtn: React.CSSProperties = {
 const clearBtn: React.CSSProperties = {
   padding: "8px 18px",
   background: "transparent",
-  border: "1px solid rgba(255,80,80,0.2)",
-  color: "rgba(255,100,100,0.45)",
+  border: "1px solid rgba(248,113,113,0.25)",
+  color: "rgba(248,113,113,0.6)",
   fontSize: 12,
   cursor: "pointer",
-  borderRadius: 6,
+  borderRadius: 999,
   fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
 };
