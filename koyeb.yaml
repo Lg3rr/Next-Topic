@@ -1,0 +1,25 @@
+name: next-topic-api
+service:
+  type: web
+  ports:
+    - port: 10000
+      protocol: http
+  env:
+    - key: NODE_ENV
+      value: production
+    - key: PORT
+      value: "10000"
+    - key: GEMINI_API_KEY
+      value: ""
+    - key: GEMINI_API_KEY_2
+      value: ""
+    - key: GEMINI_API_KEY_3
+      value: ""
+    - key: GEMINI_API_KEY_4
+      value: ""
+  build:
+    builder: NIXPACKS
+    nixpacks:
+      buildCommand: pnpm install && cd artifacts/api-server && pnpm run build
+      startCommand: cd artifacts/api-server && pnpm run start
+
