@@ -6,3 +6,9 @@ id = "b-PwJqQ4BdH9pLxRXhtLJ"
 uri = "file://attached_assets/Screenshot_20260718_135139_Next_Topic_1784658774402.png"
 type = "image"
 title = "User's deployed app screenshot"
+
+[[outputs]]
+id = "XX2PrYW1PeTPe84jw3oIG"
+uri = "file://next-topic-deploy.zip"
+type = "unspecified"
+title = "Next Topic - Vercel Deployment Package (Fixed)"
