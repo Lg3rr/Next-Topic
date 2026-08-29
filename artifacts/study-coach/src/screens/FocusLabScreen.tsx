@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell } from "recharts";
-import { getSessions } from "../storage";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 import { computeFocusLabStats, setWeeklyGoalHours, getWeeklyGoalHours } from "../focusLabStats";
 import { color, font, card } from "../theme";
 
@@ -11,10 +11,14 @@ export default function FocusLabScreen() {
   const [goal, setGoal] = useState(getWeeklyGoalHours());
   const [editingGoal, setEditingGoal] = useState(false);
 
-  const stats = useMemo(() => {
-    const sessions = getSessions();
-    return computeFocusLabStats(sessions);
-  }, [goal]);
+  const [sessions, setSessions] = useState<import("../storage").Session[]>([]);
+  const { getAllSessions } = useLocalStorage();
+
+  useEffect(() => {
+    getAllSessions().then(setSessions);
+  }, [getAllSessions]);
+
+  const stats = useMemo(() => computeFocusLabStats(sessions), [sessions, goal]);
 
   function commitGoal(v: number) {
     if (v > 0) {
