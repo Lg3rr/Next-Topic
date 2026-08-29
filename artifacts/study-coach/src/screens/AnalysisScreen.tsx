@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  getSessions,
   getLastAnalysis,
   saveLastAnalysis,
   getAISummary,
@@ -17,6 +16,7 @@ import {
   type AdvancedInsights,
 } from "../storage";
 import { analyzeStudy, type AnalyzeResponse } from "../api";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 import { color } from "../theme";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -75,7 +75,17 @@ export default function AnalysisScreen() {
   const [insights, setInsights] = useState<AdvancedInsights | null>(() => getAdvancedInsights());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sessionCount, setSessionCount] = useState(() => getSessions().length);
+  const [sessionCount, setSessionCount] = useState(0);
+  const [allSessionsData, setAllSessionsData] = useState<Session[]>([]);
+  const { getAllSessions } = useLocalStorage();
+
+  useEffect(() => {
+    getAllSessions().then((s) => {
+      setAllSessionsData(s);
+      setSessionCount(s.length);
+    });
+  }, [getAllSessions]);
+
   const [cooldownMs, setCooldownMs] = useState<number | null>(null);
 
   useEffect(() => {
@@ -105,7 +115,7 @@ export default function AnalysisScreen() {
   async function handleAnalyze() {
     console.log("[ANALYZE] Button pressed");
     console.log("[ANALYZE] loading:", loading, "cooldownMs:", cooldownMs);
-    
+
     if (loading || cooldownMs) {
       console.log("[ANALYZE] Early return: loading=" + loading + ", cooldownMs=" + cooldownMs);
       return;
@@ -114,16 +124,17 @@ export default function AnalysisScreen() {
     console.log("[ANALYZE] Starting analysis...");
     setLoading(true);
     console.log("[ANALYZE] setLoading(true) called");
-    
+
     setError(null);
     console.log("[ANALYZE] setError(null) called");
-    
+
     try {
       console.log("[ANALYZE] Inside try block");
-      
-      const sessions = getSessions();
+
+      const sessions = await getAllSessions();
+      setAllSessionsData(sessions);
       console.log("[ANALYZE] getSessions() returned:", sessions.length, "sessions");
-      
+
       if (sessions.length === 0) {
         console.log("[ANALYZE] VALIDATION: No sessions - setting error and returning");
         setError("No sessions logged yet. Add some study sessions first.");
@@ -131,19 +142,19 @@ export default function AnalysisScreen() {
         console.log("[ANALYZE] setLoading(false) called (no sessions path)");
         return;
       }
-      
+
       console.log("[ANALYZE] Validation passed - sessions exist");
       setSessionCount(sessions.length);
       console.log("[ANALYZE] setSessionCount called");
-      
+
       const aiSummary = getAISummary();
       console.log("[ANALYZE] getAISummary() returned:", aiSummary);
-      
+
       console.log("[ANALYZE] About to call analyzeStudy()");
       console.log("[ANALYZE] Request payload: sessions count =", sessions.length, ", aiSummary =", aiSummary);
-      
+
       const response = await analyzeStudy(sessions, undefined, aiSummary);
-      
+
       console.log("[ANALYZE] analyzeStudy() completed successfully");
       console.log("[ANALYZE] Response received:", response);
 
@@ -151,7 +162,6 @@ export default function AnalysisScreen() {
         throw new Error("Invalid response from server: Missing analysis data");
       }
 
-      // Normalize response shape if backend sends old keys or misses fields
       const normalizedAnalysis: AnalysisResult = {
         status: response.analysis.status || "INCONSISTENT",
         performance_level: response.analysis.performance_level ?? (response.analysis as any).level ?? 5,
@@ -170,15 +180,15 @@ export default function AnalysisScreen() {
           reason: p.reason || `Priority: ${p.priority}`
         })) ?? []
       };
-      
+
       saveLastAnalysis(normalizedAnalysis);
       setAnalysis(normalizedAnalysis);
-      
+
       if (response.insights) {
         console.log("[ANALYZE] Insights exist, saving...");
         saveAdvancedInsights(response.insights);
         console.log("[ANALYZE] saveAdvancedInsights() called");
-        
+
         setInsights(response.insights);
         console.log("[ANALYZE] setInsights() called");
       } else {
@@ -195,37 +205,36 @@ export default function AnalysisScreen() {
         recommendations: response.analysis.improvement_points || [],
       };
       console.log("[ANALYZE] Created newSummary:", newSummary);
-      
+
       saveAISummary(newSummary);
       console.log("[ANALYZE] saveAISummary() called");
-      
+
       setLoading(false);
       console.log("[ANALYZE] setLoading(false) called (success path)");
       console.log("[ANALYZE] ✅ Analysis completed successfully");
-      
+
     } catch (e) {
       console.error("[ANALYZE] ❌ EXCEPTION CAUGHT");
       console.error("[ANALYZE] Error type:", typeof e);
       console.error("[ANALYZE] Error instanceof Error:", e instanceof Error);
       console.error("[ANALYZE] Error object:", e);
-      
+
       if (e instanceof Error) {
         console.error("[ANALYZE] Error.message:", e.message);
         console.error("[ANALYZE] Error.stack:", e.stack);
       }
-      
+
       const errorMsg = e instanceof Error ? e.message : "Unknown error";
       setError(errorMsg);
-      
-      // Only set cooldown for server errors (5xx) or rate limits, not for client-side or validation errors
+
       const isServerError = errorMsg.includes("500") || errorMsg.includes("503") || errorMsg.includes("Server error");
       const isRateLimit = errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("limit");
-      
+
       if (isServerError || isRateLimit || errorMsg === "Unknown error") {
         setCooldown(Date.now() + 10 * 60 * 1000);
         setCooldownMs(10 * 60 * 1000);
       }
-      
+
       setLoading(false);
       console.log("[ANALYZE] setLoading(false) called (catch path)");
     }
@@ -233,8 +242,7 @@ export default function AnalysisScreen() {
 
   const status = analysis ? normalizeStatus(analysis.status) : "";
   const statusColor = STATUS_COLOR[status] ?? "#fff";
-  const allSessions = getSessions();
-  const stats = computeStats(allSessions);
+  const stats = computeStats(allSessionsData);
 
   const mostStudied = stats.length > 0 ? stats.reduce((a, b) => a.hours > b.hours ? a : b) : null;
   const highestFocus = stats.length > 0 ? stats.reduce((a, b) => a.avgFocus > b.avgFocus ? a : b) : null;
@@ -243,7 +251,6 @@ export default function AnalysisScreen() {
   return (
     <div style={{ padding: "24px 20px", maxWidth: 480, margin: "0 auto", fontFamily: font }}>
 
-      {/* Run button + session badge */}
       <div style={{ marginBottom: 4 }}>
         <motion.button
           onClick={handleAnalyze}
@@ -290,7 +297,6 @@ export default function AnalysisScreen() {
           style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 16 }}
         >
 
-          {/* Status block */}
           <div style={{ ...section, borderColor: statusColor + "30", background: statusColor + "0a", textAlign: "center", padding: "24px 20px" }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: statusColor, letterSpacing: 1, marginBottom: 4 }}>
               {status}
@@ -303,14 +309,12 @@ export default function AnalysisScreen() {
             </div>
           </div>
 
-          {/* One-liner */}
           <div style={{ ...section, borderColor: "rgba(255,255,255,0.06)" }}>
             <div style={{ fontSize: 13, color: "#bbb", fontStyle: "italic", lineHeight: 1.7 }}>
               "{analysis.one_liner}"
             </div>
           </div>
 
-          {/* Patterns */}
           {analysis.patterns?.length > 0 && (
             <div style={section}>
               <SectionTitle>Patterns</SectionTitle>
@@ -318,7 +322,6 @@ export default function AnalysisScreen() {
             </div>
           )}
 
-          {/* Key Issues */}
           {analysis.callouts?.length > 0 && (
             <div style={section}>
               <SectionTitle>Key Issues</SectionTitle>
@@ -326,7 +329,6 @@ export default function AnalysisScreen() {
             </div>
           )}
 
-          {/* How to Improve */}
           {(analysis.improvement_points?.length ?? 0) > 0 && (
             <div style={section}>
               <SectionTitle>How to Improve</SectionTitle>
@@ -334,7 +336,6 @@ export default function AnalysisScreen() {
             </div>
           )}
 
-          {/* Weak Subjects */}
           {(analysis.weak_subjects?.length ?? 0) > 0 && (
             <div style={section}>
               <SectionTitle>Weak Subjects</SectionTitle>
@@ -344,7 +345,6 @@ export default function AnalysisScreen() {
             </div>
           )}
 
-          {/* Advanced Insights */}
           {insights && insights.patterns?.length > 0 && (
             <div style={section}>
               <SectionTitle>Pattern Detection</SectionTitle>
@@ -361,7 +361,6 @@ export default function AnalysisScreen() {
             </div>
           )}
 
-          {/* Personalized Recommendations */}
           {insights && insights.recommendations?.length > 0 && (
             <div style={section}>
               <SectionTitle>Action Items</SectionTitle>
@@ -378,42 +377,38 @@ export default function AnalysisScreen() {
               </div>
             </div>
           )}
-          
-          {/* nExt action */}
-          
+
           {analysis.next_action_plan?.length > 0 && (
-  <div style={section}>
-    <SectionTitle>What to Study Next</SectionTitle>
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
-      {analysis.next_action_plan.map((t, i) => (
-        <div key={i} style={planCard}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 6 }}>
-            {t.subject}
-          </div>
-          <div style={{ fontSize: 13, color: "#aaa", lineHeight: 1.6, marginBottom: 6 }}>
-            {t.task}
-          </div>
-          <div style={{ fontSize: 11, color: "#555", lineHeight: 1.5 }}>
-            {t.reason}
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+            <div style={section}>
+              <SectionTitle>What to Study Next</SectionTitle>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+                {analysis.next_action_plan.map((t, i) => (
+                  <div key={i} style={planCard}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 6 }}>
+                      {t.subject}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#aaa", lineHeight: 1.6, marginBottom: 6 }}>
+                      {t.task}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#555", lineHeight: 1.5 }}>
+                      {t.reason}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </motion.div>
       )}
       </AnimatePresence>
 
-      {/* Subject Statistics */}
       {stats.length > 0 && (
         <div style={{ marginTop: 32 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: "#444", letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 }}>
             Subject Statistics
           </div>
 
-          {/* Quick Insights */}
           <div style={{ ...section, marginBottom: 12, borderColor: "rgba(255,255,255,0.05)" }}>
             <SectionTitle>Quick Insights</SectionTitle>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -435,7 +430,6 @@ export default function AnalysisScreen() {
             </div>
           </div>
 
-          {/* Per-subject cards */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {stats.map((s) => (
               <div key={s.subject} style={{ ...section, borderColor: "rgba(255,255,255,0.05)" }}>
@@ -520,4 +514,4 @@ function analyzeBtn(loading: boolean): React.CSSProperties {
     fontFamily: font,
     letterSpacing: 0.3,
   };
-                 }
+}
